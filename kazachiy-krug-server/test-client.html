@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Socket.io test client</title>
+</head>
+
+<body>
+    <h1>Socket.io test</h1>
+    <button id="pingBtn">Send ping</button>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script>
+        const socket = io('http://localhost:3000');
+
+        socket.on('connect', () => {
+            console.log('Connected to server:', socket.id);
+        });
+
+        socket.on('pong', (data) => {
+            console.log('Pong received from server:', data);
+        });
+        socket.emit('join:chat', {
+            chatId: 'room-1'
+        });
+
+        socket.on('chat:joined', (data) => {
+            console.log('Joined chat:', data.chatId);
+        });
+        socket.emit('message:send', {
+            chatId: 'room-1',
+            text: 'Всем привет',
+        });
+
+        socket.on("message:send", ({ chatId, text, sender }) => {
+            io.to(chatId).emit("message:new", {
+                chatId,
+                text,
+                sender
+            });
+            console.log('New message:', text);
+        });
+
+        document.getElementById('pingBtn').addEventListener('click', () => {
+            socket.emit('ping', {
+                from: 'test-client',
+                time: Date.now(),
+            });
+        });
+    </script>
+</body>
+
+</html>

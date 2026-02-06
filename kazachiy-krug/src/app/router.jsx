@@ -7,21 +7,35 @@ import Settings from "../screens/Settings/Settings";
 import Profile from "../screens/Profile/Profile";
 
 export default function AppRouter({ currentUser, setCurrentUser }) {
+
+    const isAuth = Boolean(currentUser);
+
     return (
         <Routes>
             {/* авторизация */}
-            <Route path="/" element={<Navigate to="/phone" replace />} />
-            <Route path="/phone" element={<Phone />} />
+            <Route
+                path="/"
+                element={<Navigate to={isAuth ? "/chat" : "/phone"} replace />}
+            />
+            <Route
+                path="/phone"
+                element={isAuth ? <Navigate to="/chat" replace /> : <Phone />}
+            />
             <Route
                 path="/code"
-                element={<Code setCurrentUser={setCurrentUser} />}
+                element={
+                    isAuth
+                        ? <Navigate to="/chat" replace />
+                        : <Code setCurrentUser={setCurrentUser} />
+                }
+
             />
 
             {/* защищенные маршруты */}
             <Route
                 path="/chat"
                 element={
-                    currentUser
+                    isAuth
                         ? <Chat currentUser={currentUser} />
                         : <Navigate to="/phone" replace />
                 }
@@ -30,7 +44,7 @@ export default function AppRouter({ currentUser, setCurrentUser }) {
             <Route
                 path="/settings"
                 element={
-                    currentUser
+                    isAuth
                         ? <Settings currentUser={currentUser} />
                         : <Navigate to="/phone" replace />
                 }
@@ -46,7 +60,11 @@ export default function AppRouter({ currentUser, setCurrentUser }) {
             />
 
             {/* fallback */}
-            <Route path="*" element={<Navigate to="/phone" replace />} />
+            <Route
+                path="*"
+                element={<Navigate to={isAuth ? "/chat" : "/phone"} replace />}
+            />
+
         </Routes>
     );
 }

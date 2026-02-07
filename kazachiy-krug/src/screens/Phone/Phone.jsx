@@ -23,7 +23,8 @@ export default function Phone() {
                 <div className="auth-field">
                     <label>Номер телефона</label>
                     <input
-                        type="tel"
+                        type="text"
+                        inputMode="tel"
                         placeholder="+7 ___ ___ __ __"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}

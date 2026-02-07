@@ -1,18 +1,9 @@
 import { useState } from "react";
 import AppRouter from "./router";
 
-function getInitialUser() {
-    try {
-        const raw = localStorage.getItem("currentUser");
-        return raw ? JSON.parse(raw) : null;
-    } catch {
-        localStorage.removeItem("currentUser");
-        return null;
-    }
-}
 
 export default function App() {
-    const [currentUser, setCurrentUser] = useState(getInitialUser);
+    const [currentUser, setCurrentUser] = useState(null);
 
     return (
         <div className="app">

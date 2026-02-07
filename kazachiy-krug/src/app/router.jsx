@@ -7,8 +7,15 @@ import Settings from "../screens/Settings/Settings";
 import Profile from "../screens/Profile/Profile";
 
 export default function AppRouter({ currentUser, setCurrentUser }) {
+    const isAuth = Boolean(currentUser?.id);
+    const hasPhone = (() => {
+        try {
+            return Boolean(localStorage.getItem("phone"));
+        } catch {
+            return false;
+        }
+    })();
 
-    const isAuth = Boolean(currentUser);
 
     return (
         <Routes>
@@ -21,15 +28,21 @@ export default function AppRouter({ currentUser, setCurrentUser }) {
                 path="/phone"
                 element={isAuth ? <Navigate to="/chat" replace /> : <Phone />}
             />
+
+
             <Route
                 path="/code"
                 element={
                     isAuth
                         ? <Navigate to="/chat" replace />
-                        : <Code setCurrentUser={setCurrentUser} />
+                        : hasPhone
+                            ? <Code setCurrentUser={setCurrentUser} />
+                            : <Navigate to="/phone" replace />
                 }
 
+
             />
+
 
             {/* защищенные маршруты */}
             <Route
@@ -53,7 +66,7 @@ export default function AppRouter({ currentUser, setCurrentUser }) {
             <Route
                 path="/profile"
                 element={
-                    currentUser
+                    isAuth
                         ? <Profile currentUser={currentUser} />
                         : <Navigate to="/phone" replace />
                 }
@@ -64,7 +77,6 @@ export default function AppRouter({ currentUser, setCurrentUser }) {
                 path="*"
                 element={<Navigate to={isAuth ? "/chat" : "/phone"} replace />}
             />
-
         </Routes>
     );
 }

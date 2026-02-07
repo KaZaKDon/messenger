@@ -2,13 +2,16 @@ import './Phone.css'
 import '../../styles/variables.css'
 import img from './icon.jpg';
 import { useNavigate } from "react-router-dom";
-import { useState } from 'react';
+import { useRef } from 'react';
 
 export default function Phone() {
     const navigate = useNavigate();
-    const [phone, setPhone] = useState("");
+    const phoneRef = useRef(null);
 
     const handleSubmit = () => {
+        const phone = phoneRef.current?.value?.trim();
+        if (!phone) return;
+
         localStorage.setItem("phone", phone);
         navigate("/code");
     };
@@ -23,11 +26,11 @@ export default function Phone() {
                 <div className="auth-field">
                     <label>Номер телефона</label>
                     <input
-                        type="text"
+                        ref={phoneRef}
+                        type="tel"
                         inputMode="tel"
+                        autoComplete="tel"
                         placeholder="+7 ___ ___ __ __"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
                     />
                 </div>
 

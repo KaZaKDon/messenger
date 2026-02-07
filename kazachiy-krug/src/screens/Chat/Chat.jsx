@@ -1,8 +1,12 @@
-import { useReducer, useMemo } from "react";
+import { useEffect, useReducer } from "react";
 import { chatReducer, initialState } from "./chatReducer";
 import { useChatSocket } from "./hooks/useChatSocket";
 import UserList from "./components/UserList";
 import ChatWindow from "./components/ChatWindow";
+import { getSocket } from "../../shared/socket";
+
+import "./chat.css";
+import "../../styles/variables.css";
 
 export default function Chat({ currentUser }) {
     const [state, dispatch] = useReducer(chatReducer, {
@@ -11,35 +15,46 @@ export default function Chat({ currentUser }) {
         chats: {}
     });
 
-    const { users, chats, activeChatUserId } = state;
+    const { users, chats, activeChatUserId, activeChatId } = state;
 
+    useEffect(() => {
+        if (activeChatUserId) return;
+        const firstUser = users.find(user => user.id !== currentUser.id);
+        if (!firstUser) return;
+        dispatch({
+            type: "SET_ACTIVE_CHAT_USER",
+            payload: firstUser.id
+        });
+    }, [activeChatUserId, currentUser.id, users]);
 
-    // 🔹 вычисляем chatId (1-на-1)
-    const chatId = useMemo(() => {
-        if (!activeChatUserId) return null;
-        return [currentUser.id, activeChatUserId].sort().join("_");
-    }, [currentUser.id, activeChatUserId]);
 
     // 🔹 сокет (ВСЕГДА)
-    useChatSocket(dispatch, currentUser, chatId);
+    useChatSocket(dispatch, currentUser, activeChatUserId, activeChatId);
 
-    const activeChat = chatId ? chats[chatId] : null;
+    const activeChat = activeChatId ? chats[activeChatId] : null;
 
     const sendMessage = (text) => {
-        if (!chatId) return;
+        if (!activeChatId) return;
+        const socket = getSocket();
+        if (!socket) return;
+
+        const message = {
+            id: crypto.randomUUID(),
+            chatId: activeChatId,
+            text,
+            senderId: currentUser.id,
+            fromMe: true,
+            status: "sent"
+        };
+
+        socket.emit("message:send", message);
+
 
         dispatch({
             type: "RECEIVE_MESSAGE",
             payload: {
-                chatId,
-                message: {
-                    id: crypto.randomUUID(),
-                    chatId,
-                    text,
-                    senderId: currentUser.id,
-                    fromMe: true,
-                    status: "sent"
-                }
+                chatId: activeChatId,
+                message
             }
         });
     };
@@ -59,11 +74,12 @@ export default function Chat({ currentUser }) {
 
             <ChatWindow
                 chat={activeChat}
+                currentUserId={currentUser.id}
                 onSend={sendMessage}
                 onDraftChange={(text) =>
                     dispatch({
                         type: "SET_DRAFT",
-                        payload: { chatId, text }
+                        payload: { chatId: activeChatId, text }
                     })
                 }
             />

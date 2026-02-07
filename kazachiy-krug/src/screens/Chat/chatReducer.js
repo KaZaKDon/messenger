@@ -11,7 +11,8 @@ export const initialState = {
         */
     },
 
-    activeChatUserId: null
+    activeChatUserId: null,
+    activeChatId: null
 };
 
 function ensureChat(state, chatId) {
@@ -43,6 +44,24 @@ export function chatReducer(state, action) {
                 ...state,
                 activeChatUserId: action.payload
             };
+        
+        case "SET_ACTIVE_CHAT": {
+            const { chatId, messages = [] } = action.payload;
+            const chats = ensureChat(state, chatId);
+
+            return {
+                ...state,
+                activeChatId: chatId,
+                chats: {
+                    ...chats,
+                    [chatId]: {
+                        ...chats[chatId],
+                        messages
+                    }
+                }
+            };
+        }
+
 
         // ---------- DRAFT ----------
         case "SET_DRAFT": {

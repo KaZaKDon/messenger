@@ -6,16 +6,9 @@ import Chat from "../screens/Chat/Chat";
 import Settings from "../screens/Settings/Settings";
 import Profile from "../screens/Profile/Profile";
 
-export default function AppRouter({ currentUser, setCurrentUser }) {
+export default function AppRouter({ currentUser, setCurrentUser, phone, setPhone }) {
     const isAuth = Boolean(currentUser?.id);
-    const hasPhone = (() => {
-        try {
-            return Boolean(localStorage.getItem("phone"));
-        } catch {
-            return false;
-        }
-    })();
-
+    const hasPhone = Boolean(phone);
 
     return (
         <Routes>
@@ -26,8 +19,11 @@ export default function AppRouter({ currentUser, setCurrentUser }) {
             />
             <Route
                 path="/phone"
-                element={isAuth ? <Navigate to="/chat" replace /> : <Phone />}
+                element={
+                    isAuth ? <Navigate to="/chat" replace /> : <Phone setPhone={setPhone} />
+                }
             />
+
 
 
             <Route

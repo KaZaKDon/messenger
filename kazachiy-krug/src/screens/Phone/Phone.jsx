@@ -2,23 +2,23 @@ import './Phone.css'
 import '../../styles/variables.css'
 import img from './icon.jpg';
 import { useNavigate } from "react-router-dom";
-import { useRef } from 'react';
+import { useState } from 'react';
 
-export default function Phone() {
+export default function Phone({ setPhone }) {
     const navigate = useNavigate();
-    const phoneRef = useRef(null);
+    const [phone, setPhoneValue] = useState("");
 
     const handleSubmit = () => {
-        const phone = phoneRef.current?.value?.trim();
-        if (!phone) return;
+        const normalizedPhone = phone.trim();
+        if (!normalizedPhone) return;
+        setPhone(normalizedPhone);
 
-        localStorage.setItem("phone", phone);
         navigate("/code");
     };
 
     return (
         <section className="auth-card">
-            <div className="first">
+            <form className="first" onSubmit={handleSubmit}>
                 <img className="auth-logo" src={img} alt="logo" />
 
                 <h1 className="auth-title">Вход по номеру телефона</h1>
@@ -26,18 +26,25 @@ export default function Phone() {
                 <div className="auth-field">
                     <label>Номер телефона</label>
                     <input
-                        ref={phoneRef}
-                        type="tel"
+                        type="text"
                         inputMode="tel"
                         autoComplete="tel"
                         placeholder="+7 ___ ___ __ __"
+                        value={phone}
+                        onChange={(event) => setPhoneValue(event.target.value)}
+                        onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                                event.preventDefault();
+                                handleSubmit();
+                            }
+                        }}
                     />
                 </div>
 
-                <button className="auth-button" onClick={handleSubmit}>
+                <button className="auth-button" type="button" onClick={handleSubmit}>
                     Получить код
                 </button>
-            </div>
+            </form>
         </section>
     );
 }

@@ -24,5 +24,5 @@ export function getUserById(userId) {
 }
 
 export function getUserName(userId) {
-    return usersById[userId]?.name ?? "Собеседник";
+    return usersById[userId]?.name ?? "Наташа";
 }

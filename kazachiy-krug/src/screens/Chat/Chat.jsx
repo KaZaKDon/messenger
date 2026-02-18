@@ -1,71 +1,144 @@
-import { useReducer, useMemo } from "react";
+import { useMemo, useReducer } from "react";
 import { chatReducer, initialState } from "./chatReducer";
 import { useChatSocket } from "./hooks/useChatSocket";
-import UserList from "./components/UserList";
+import DialogList from "./components/DialogList";
 import ChatWindow from "./components/ChatWindow";
+import { getSocket } from "../../shared/socket";
+
+import "./chat.css";
+import "../../styles/variables.css";
 
 export default function Chat({ currentUser }) {
     const [state, dispatch] = useReducer(chatReducer, {
         ...initialState,
         activeChatUserId: null,
-        chats: {}
+        chats: {},
     });
 
-    const { users, chats, activeChatUserId } = state;
+    const { users, chats, activeChatUserId, activeChatId } = state;
 
+    const activeChat = activeChatId ? chats[activeChatId] : null;
 
-    // 🔹 вычисляем chatId (1-на-1)
-    const chatId = useMemo(() => {
+    // 🔹 сокет (всегда)
+    useChatSocket(
+        dispatch,
+        currentUser,
+        activeChatUserId,
+        activeChatId,
+        activeChat?.messages ?? []
+    );
+
+    // ✅ активный “пользователь/группа” для шапки
+    // - обычно берём из users по activeChatUserId
+    // - для лички дополнительно разрешаем fallback на chat.otherUser (приходит с сервера)
+    const activeUser = useMemo(() => {
         if (!activeChatUserId) return null;
-        return [currentUser.id, activeChatUserId].sort().join("_");
-    }, [currentUser.id, activeChatUserId]);
 
-    // 🔹 сокет (ВСЕГДА)
-    useChatSocket(dispatch, currentUser, chatId);
+        const fromList = users.find((u) => u.id === activeChatUserId) ?? null;
+        if (fromList) return fromList;
 
-    const activeChat = chatId ? chats[chatId] : null;
+        // fallback: если это private chat и сервер прислал otherUser
+        if (activeChat?.type === "private" && activeChat?.otherUser?.id) {
+            return activeChat.otherUser;
+        }
 
-    const sendMessage = (text) => {
-        if (!chatId) return;
+        return null;
+    }, [activeChat?.otherUser, activeChat?.type, activeChatUserId, users]);
+
+    const sendMessage = ({ text, imageUrl, imageUrls }) => {
+        if (!activeChatId) return;
+
+        const socket = getSocket();
+        if (!socket) return;
+
+        const cleanText = (text ?? "").toString();
+        const hasAnyImage =
+            typeof imageUrl === "string"
+                ? imageUrl.trim().length > 0
+                : Array.isArray(imageUrls) && imageUrls.filter(Boolean).length > 0;
+
+        // защита от совсем пустого
+        if (!cleanText.trim() && !hasAnyImage) return;
+
+        const message = {
+            id: crypto.randomUUID(),
+            chatId: activeChatId,
+            text: cleanText,
+            imageUrl: imageUrl ?? null,
+            imageUrls: Array.isArray(imageUrls) ? imageUrls : undefined,
+            senderId: currentUser.id,
+            fromMe: true,
+            status: "sent",
+        };
+
+        socket.emit("message:send", message);
 
         dispatch({
             type: "RECEIVE_MESSAGE",
-            payload: {
-                chatId,
-                message: {
-                    id: crypto.randomUUID(),
-                    chatId,
-                    text,
-                    senderId: currentUser.id,
-                    fromMe: true,
-                    status: "sent"
-                }
-            }
+            payload: { chatId: activeChatId, message },
         });
+    };
+
+    const openPrivateChat = (userId) => {
+        // не даём открыть “на себя”
+        if (!userId || userId === currentUser.id) return;
+
+        stopTyping();
+        dispatch({ type: "SET_ACTIVE_CHAT_USER", payload: userId });
+    };
+
+    const startTyping = () => {
+        if (!activeChatId) return;
+        const socket = getSocket();
+        if (!socket) return;
+
+        socket.emit("typing:start", { chatId: activeChatId });
+    };
+
+    const stopTyping = () => {
+        if (!activeChatId) return;
+        const socket = getSocket();
+        if (!socket) return;
+
+        socket.emit("typing:stop", { chatId: activeChatId });
     };
 
     return (
         <div className="chat-layout">
-            <UserList
-                users={users.filter(u => u.id !== currentUser.id)}
+            <DialogList
+                currentUserId={currentUser.id}
+                users={users.filter((user) => user.id !== currentUser.id)}
+                chats={chats}
                 activeUserId={activeChatUserId}
-                onSelect={(userId) =>
+                onSelect={(userId) => {
+                    stopTyping();
+
                     dispatch({
                         type: "SET_ACTIVE_CHAT_USER",
-                        payload: userId
-                    })
-                }
+                        payload: userId,
+                    });
+                }}
             />
 
             <ChatWindow
+                key={activeChatUserId ?? "no-chat"}
                 chat={activeChat}
+                activeUser={activeUser}
+                hasSelectedChat={Boolean(activeChatUserId)}
+                currentUserId={currentUser.id}
                 onSend={sendMessage}
-                onDraftChange={(text) =>
+                onWriteToAuthor={openPrivateChat}
+                onDraftChange={(text) => {
+                    // ✅ не пишем draft в "никуда"
+                    if (!activeChatId) return;
+
                     dispatch({
                         type: "SET_DRAFT",
-                        payload: { chatId, text }
-                    })
-                }
+                        payload: { chatId: activeChatId, text },
+                    });
+                }}
+                onTypingStart={startTyping}
+                onTypingStop={stopTyping}
             />
         </div>
     );

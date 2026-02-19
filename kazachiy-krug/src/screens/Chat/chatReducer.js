@@ -14,6 +14,7 @@ function ensureChat(state, chatId) {
             id: chatId,
             type: chatId?.startsWith?.("group-") ? "group" : "private",
             title: "",
+            canPublish: true,
             members: [],
             membersInfo: [],
             otherUser: null,
@@ -75,6 +76,7 @@ export function chatReducer(state, action) {
                 members,
                 membersInfo,
                 otherUser,
+                canPublish,
             } = action.payload || {};
 
             if (!chatId) return state;
@@ -90,6 +92,7 @@ export function chatReducer(state, action) {
                         ...chats[chatId],
                         type: type ?? chats[chatId].type ?? "private",
                         title: title ?? chats[chatId].title ?? "",
+                        canPublish: canPublish ?? chats[chatId].canPublish ?? true,
                         members: members ?? chats[chatId].members ?? [],
                         membersInfo: membersInfo ?? chats[chatId].membersInfo ?? [],
                         otherUser: otherUser ?? chats[chatId].otherUser ?? null,
@@ -140,6 +143,26 @@ export function chatReducer(state, action) {
                 },
             };
         }
+
+        case "REMOVE_MESSAGE": {
+            const { chatId, messageId } = action.payload || {};
+            if (!chatId || !messageId) return state;
+
+            const chats = ensureChat(state, chatId);
+            const chat = chats[chatId];
+
+            return {
+                ...state,
+                chats: {
+                    ...chats,
+                    [chatId]: {
+                        ...chat,
+                        messages: chat.messages.filter((m) => m.id !== messageId),
+                    },
+                },
+            };
+        }
+
 
         case "UPDATE_MESSAGE_STATUS": {
             const { chatId, messageId, status } = action.payload;

@@ -5,6 +5,7 @@ import Code from "../screens/Auth/Code";
 import Chat from "../screens/Chat/Chat";
 import Settings from "../screens/Settings/Settings";
 import Profile from "../screens/Profile/Profile";
+import AppFrame from "../layouts/AppFrame";
 
 export default function AppRouter({ currentUser, setCurrentUser, phone, setPhone }) {
     const isAuth = Boolean(currentUser?.id);
@@ -45,7 +46,12 @@ export default function AppRouter({ currentUser, setCurrentUser, phone, setPhone
                 path="/chat"
                 element={
                     isAuth
-                        ? <Chat currentUser={currentUser} />
+                        ? (
+                            <AppFrame currentUser={currentUser}>
+                                <Chat currentUser={currentUser} />
+                            </AppFrame>
+                        )
+
                         : <Navigate to="/phone" replace />
                 }
             />
@@ -54,7 +60,12 @@ export default function AppRouter({ currentUser, setCurrentUser, phone, setPhone
                 path="/settings"
                 element={
                     isAuth
-                        ? <Settings currentUser={currentUser} />
+                        ? (
+                            <AppFrame currentUser={currentUser}>
+                                <Settings currentUser={currentUser} />
+                            </AppFrame>
+                        )
+
                         : <Navigate to="/phone" replace />
                 }
             />
@@ -63,7 +74,12 @@ export default function AppRouter({ currentUser, setCurrentUser, phone, setPhone
                 path="/profile"
                 element={
                     isAuth
-                        ? <Profile currentUser={currentUser} />
+                        ? (
+                            <AppFrame currentUser={currentUser}>
+                                <Profile currentUser={currentUser} />
+                            </AppFrame>
+                        )
+
                         : <Navigate to="/phone" replace />
                 }
             />

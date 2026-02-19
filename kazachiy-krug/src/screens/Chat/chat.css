@@ -1,4 +1,5 @@
-.chat-layout {
+.chat-layout,
+.chat-main {
     display: flex;
     height: 100vh;
 }

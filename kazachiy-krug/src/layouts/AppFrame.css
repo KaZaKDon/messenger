@@ -1,0 +1,9 @@
+.app-frame {
+    display: flex;
+    min-height: 100vh;
+}
+
+.app-frame-content {
+    flex: 1;
+    min-width: 0;
+}

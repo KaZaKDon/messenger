@@ -104,42 +104,43 @@ export default function Chat({ currentUser }) {
     };
 
     return (
-        <div className="chat-layout">
-            <DialogList
-                currentUserId={currentUser.id}
-                users={users.filter((user) => user.id !== currentUser.id)}
-                chats={chats}
-                activeUserId={activeChatUserId}
-                onSelect={(userId) => {
-                    stopTyping();
+        <div className="chat-main">
+                <DialogList
+                    currentUserId={currentUser.id}
+                    users={users.filter((user) => user.id !== currentUser.id)}
+                    chats={chats}
+                    activeUserId={activeChatUserId}
+                    onSelect={(userId) => {
+                        stopTyping();
 
-                    dispatch({
-                        type: "SET_ACTIVE_CHAT_USER",
-                        payload: userId,
-                    });
-                }}
-            />
+                        dispatch({
+                            type: "SET_ACTIVE_CHAT_USER",
+                            payload: userId,
+                        });
+                    }}
+                />
 
-            <ChatWindow
-                key={activeChatUserId ?? "no-chat"}
-                chat={activeChat}
-                activeUser={activeUser}
-                hasSelectedChat={Boolean(activeChatUserId)}
-                currentUserId={currentUser.id}
-                onSend={sendMessage}
-                onWriteToAuthor={openPrivateChat}
-                onDraftChange={(text) => {
-                    // ✅ не пишем draft в "никуда"
-                    if (!activeChatId) return;
+                <ChatWindow
+                    key={activeChatUserId ?? "no-chat"}
+                    chat={activeChat}
+                    activeUser={activeUser}
+                    hasSelectedChat={Boolean(activeChatUserId)}
+                    currentUserId={currentUser.id}
+                    onSend={sendMessage}
+                    onWriteToAuthor={openPrivateChat}
+                    onDraftChange={(text) => {
+                        // ✅ не пишем draft в "никуда"
+                        if (!activeChatId) return;
 
-                    dispatch({
-                        type: "SET_DRAFT",
-                        payload: { chatId: activeChatId, text },
-                    });
-                }}
-                onTypingStart={startTyping}
-                onTypingStop={stopTyping}
-            />
+                        dispatch({
+                            type: "SET_DRAFT",
+                            payload: { chatId: activeChatId, text },
+                        });
+                    }}
+                    onTypingStart={startTyping}
+                    onTypingStop={stopTyping}
+                />
+
         </div>
     );
 }

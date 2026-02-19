@@ -1,6 +1,6 @@
 import { chats } from "../store/chats.js";
 import { getOrCreatePrivateChat } from "../store/chatHelpers.js";
-import { getGroupRuleByChatId } from "../store/groupPolicy.js";
+import { canPublishToGroup, getGroupRuleByChatId } from "../store/groupPolicy.js";
 import { usersById } from "../store/users.js";
 
 function pickMembersInfo(memberIds) {
@@ -26,7 +26,11 @@ export function chatSocket(io, socket) {
             if (!groupChat) return;
             if (!groupChat.members.includes(socket.data.userId)) return;
 
-            socket.emit("chat:open", groupChat);
+            socket.emit("chat:open", {
+                ...groupChat,
+                canPublish: canPublishToGroup(groupChat.id, socket.data.userId),
+            });
+
             return;
         }
 
@@ -73,6 +77,7 @@ export function chatSocket(io, socket) {
                 type: groupChat.type,
                 members: groupChat.members,
                 messages: groupChat.messages,
+                canPublish: canPublishToGroup(groupChat.id, socket.data.userId),
             });
             return;
         }

@@ -102,7 +102,7 @@ export function chatSocket(io, socket) {
 
         const chat = chats[chatId];
         if (!chat) return;
-        if (!chat.members.includes(socket.data.userId)) return;
+        if (!chat.members.includes(socket.data.userId) && !isAnnouncementGroup(chatId)) return;
         if (socket.rooms.has(chatId)) return;
 
         socket.join(chatId);

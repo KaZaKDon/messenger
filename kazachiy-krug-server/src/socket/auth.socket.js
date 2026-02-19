@@ -27,7 +27,8 @@ function joinUserGroupRooms(socket) {
     if (!userId) return;
 
     for (const group of Object.values(GROUP_RULES)) {
-        if (!group?.members?.includes(userId)) continue;
+        const canJoin = group?.members?.includes(userId) || isAnnouncementGroup(group?.id);
+        if (!canJoin) continue;
 
         const roomId = group.roomId ?? group.id; // у тебя roomId = group-*
         // безопасность: комната должна существовать как чат в сторе
@@ -121,32 +122,32 @@ export function authSocket(io, socket) {
     });
 
     socket.on("users:get", () => {
-        if (!socket.data.isAuth) return;
+    if (!socket.data.isAuth) return;
 
-        // --- ГРУППЫ: строго по group-1..group-N, сверху списка ---
-        const groups = Object.values(GROUP_RULES)
-            .filter((group) => group?.members?.includes(socket.data.userId))
-            .sort((a, b) => groupNumber(a.id) - groupNumber(b.id))
-            .map((group) => ({
-                id: group.id,
-                name: group.title, // фронт рендерит name
-                phone: null,
-                avatar: null,
-                isOnline: false,
-                isGroup: true, // фронт может игнорировать, но полезно иметь
-            }));
+    // --- ГРУППЫ: строго по group-1..group-N, сверху списка ---
+    const groups = Object.values(GROUP_RULES)
+        .filter((group) => group?.members?.includes(socket.data.userId) || isAnnouncementGroup(group?.id))
+        .sort((a, b) => groupNumber(a.id) - groupNumber(b.id))
+        .map((group) => ({
+            id: group.id,
+            name: group.title, // фронт рендерит name
+            phone: null,
+            avatar: null,
+            isOnline: false,
+            isGroup: true, // фронт может игнорировать, но полезно иметь
+        }));
 
-        // --- ПОЛЬЗОВАТЕЛИ ---
-        const users = Object.values(usersById)
-            .filter((u) => u.id !== socket.data.userId)
-            .map((user) => ({
-                ...user,
-                isOnline: onlineUsers.has(user.id),
-            }));
+    // --- ПОЛЬЗОВАТЕЛИ ---
+    const users = Object.values(usersById)
+        .filter((u) => u.id !== socket.data.userId)
+        .map((user) => ({
+            ...user,
+            isOnline: onlineUsers.has(user.id),
+        }));
 
-        // ✅ Сначала круги, потом люди
-        socket.emit("users:list", [...groups, ...users]);
-    });
+    // ✅ Сначала круги, потом люди
+    socket.emit("users:list", [...groups, ...users]);
+});
 
     socket.on("disconnect", () => {
         const userId = socket.data.userId;

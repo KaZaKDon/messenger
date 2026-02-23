@@ -57,6 +57,11 @@ export function messageSocket(io, socket) {
 
         if (!chat.members.includes(socket.data.userId)) {
             console.log("⛔ drop: sender not member", { chatId, userId: socket.data.userId });
+            socket.emit("message:error", {
+                chatId,
+                messageId: message?.id,
+                reason: "У вас нет доступа к этой группе.",
+            });
             return;
         }
 
@@ -64,6 +69,7 @@ export function messageSocket(io, socket) {
             if (!canPublishToGroup(chatId, socket.data.userId)) {
                 socket.emit("message:error", {
                     chatId,
+                    messageId: message?.id,
                     reason: "У вас нет прав на публикацию в этой группе.",
                 });
                 return;
@@ -72,7 +78,11 @@ export function messageSocket(io, socket) {
             const validation = validateGroupMessage(chatId, message);
             if (!validation.ok) {
                 console.log("❌ group validation failed", { chatId, reason: validation.reason });
-                socket.emit("message:error", { chatId, reason: validation.reason });
+                socket.emit("message:error", {
+                    chatId,
+                    messageId: message?.id,
+                    reason: validation.reason,
+                });
                 return;
             }
         }
@@ -86,6 +96,9 @@ export function messageSocket(io, socket) {
         };
 
         chat.messages.push(serverMessage);
+
+        // возвращаем отправителю серверную версию сообщения
+        socket.emit("message:new", serverMessage);
 
         console.log(`📩 [${chatId}] ${socket.data.userName}: ${serverMessage.text ?? ""}`);
 

@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { getSocket } from "../../../shared/socket";
 
-const isGroupId = (id) => typeof id === "string" && id.startsWith("group-");
 
 export function useChatSocket(
     dispatch,
@@ -15,15 +14,12 @@ export function useChatSocket(
         const socket = getSocket();
         if (!socket) return;
 
-        if (!currentUser?.id) {
-            socket.userListRequested = false;
-            return;
-        }
+        if (!currentUser?.id) return;
 
-        if (!socket.userListRequested) {
-            socket.userListRequested = true;
-            socket.emit("users:get");
-        }
+        // ВАЖНО: запрашиваем список при каждом входе на экран чата.
+        // Иначе после перехода в /profile или /settings и обратно
+        // список кругов/чатов может остаться пустым.
+        socket.emit("users:get");
 
         const onUsers = (users) => {
             console.log("📥 users from socket:", users);
@@ -37,15 +33,13 @@ export function useChatSocket(
         };
     }, [currentUser?.id, dispatch]);
 
-    // --- OPEN CHAT (PRIVATE ONLY) ---
-    // ⚠️ Группы НЕ открываем через chat:open — activeChatId у них = group-N сразу.
+    // --- OPEN CHAT (PRIVATE + GROUP) ---
+    // ✅ Для групп тоже запрашиваем chat:open, чтобы получать серверную историю
+    // (важно для офлайн-пользователей, которые не получали message:new в момент публикации).
     useEffect(() => {
         const socket = getSocket();
         if (!socket) return;
         if (!currentUser?.id || !activeChatUserId) return;
-
-        // ✅ группы пропускаем
-        if (isGroupId(activeChatUserId)) return;
 
         socket.emit("chat:open", {
             from: currentUser.id,
@@ -62,11 +56,21 @@ export function useChatSocket(
                 members,
                 membersInfo,
                 otherUser,
+                canPublish,
             } = payload || {};
 
             dispatch({
                 type: "SET_ACTIVE_CHAT",
-                payload: { chatId, messages, type, title, members, membersInfo, otherUser },
+                payload: {
+                    chatId,
+                    messages,
+                    type,
+                    title,
+                    members,
+                    membersInfo,
+                    otherUser,
+                    canPublish,
+                },
             });
         };
 
@@ -119,14 +123,29 @@ export function useChatSocket(
             });
         };
 
+        const onMessageError = ({ chatId, messageId, reason }) => {
+            if (chatId && messageId) {
+                dispatch({
+                    type: "REMOVE_MESSAGE",
+                    payload: { chatId, messageId },
+                });
+            }
+
+            if (reason) {
+                alert(reason);
+            }
+        };
+
         socket.on("message:new", onMessage);
         socket.on("message:delivered", onDelivered);
         socket.on("message:read", onRead);
+        socket.on("message:error", onMessageError);
 
         return () => {
             socket.off("message:new", onMessage);
             socket.off("message:delivered", onDelivered);
             socket.off("message:read", onRead);
+            socket.off("message:error", onMessageError);
         };
     }, [activeChatId, currentUser?.id, dispatch]);
 

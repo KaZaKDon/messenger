@@ -211,6 +211,8 @@ export default function ChatWindow({
     const isAnnouncementGroup =
         typeof chat?.id === "string" && /^group-(?:[4-9]|10)$/.test(chat.id);
 
+    const canPublish = chat?.canPublish !== false;
+
     // ✅ phone: берём из activeUser, если нет — из chat.otherUser (новый payload с сервера)
     const otherPhone =
         activeUser?.phone ??
@@ -281,12 +283,18 @@ export default function ChatWindow({
                                 <button
                                     type="button"
                                     className="announce-cta-btn"
-                                    disabled={!chat || !hasSelectedChat}
+                                    disabled={!chat || !hasSelectedChat || !canPublish}
                                     onClick={() => setAnnouncementMode("create")}
                                 >
                                     + Разместить объявление
                                 </button>
                             </div>
+
+                            {!canPublish ? (
+                                <div className="chat-empty-placeholder">
+                                    У вас нет прав на публикацию в этой группе.
+                                </div>
+                            ) : null}
                         </>
                     ) : (
                         /* CREATE */
@@ -302,7 +310,7 @@ export default function ChatWindow({
                             </div>
 
                             <AnnouncementComposer
-                                disabled={!chat || !hasSelectedChat}
+                                disabled={!chat || !hasSelectedChat || !canPublish}
                                 onSubmit={({ text, imageUrls }) => {
                                     onSend({ text, imageUrls });
                                     setAnnouncementMode("feed");
@@ -381,7 +389,7 @@ export default function ChatWindow({
                                 type="button"
                                 className="attach-btn"
                                 aria-label="attach"
-                                disabled={!chat || !hasSelectedChat || uploading}
+                                disabled={!chat || !hasSelectedChat || uploading || !canPublish}
                                 onClick={() => fileInputRef.current?.click()}
                                 title="Прикрепить картинку"
                             >
@@ -400,7 +408,7 @@ export default function ChatWindow({
                                 type="button"
                                 className="emoji-btn"
                                 aria-label="emoji"
-                                disabled={!chat || !hasSelectedChat || uploading}
+                                disabled={!chat || !hasSelectedChat || uploading || !canPublish}
                                 onClick={() => setEmojiOpen((v) => !v)}
                                 title="Смайлики"
                             >
@@ -425,16 +433,16 @@ export default function ChatWindow({
 
                         <textarea
                             value={chat?.draft ?? ""}
-                            disabled={!chat || !hasSelectedChat || uploading}
+                            disabled={!chat || !hasSelectedChat || uploading || !canPublish}
                             onChange={handleChange}
                             onBlur={stopTypingNow}
                             onKeyDown={handleKeyDown}
-                            placeholder={uploading ? "Загрузка..." : "Сообщение..."}
+                            placeholder={canPublish ? (uploading ? "Загрузка..." : "Сообщение...") : "Публикация в этой группе запрещена"}
                             rows={1}
                         />
 
                         <button
-                            disabled={!chat || !hasSelectedChat || uploading}
+                            disabled={!chat || !hasSelectedChat || uploading || !canPublish}
                             onClick={handleSend}
                             title="Отправить"
                         >

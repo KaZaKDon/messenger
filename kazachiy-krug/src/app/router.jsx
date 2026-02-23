@@ -7,13 +7,19 @@ import Settings from "../screens/Settings/Settings";
 import Profile from "../screens/Profile/Profile";
 import AppFrame from "../layouts/AppFrame";
 
-export default function AppRouter({ currentUser, setCurrentUser, phone, setPhone }) {
+export default function AppRouter({
+    currentUser,
+    setCurrentUser,
+    phone,
+    setPhone,
+    isNightMode,
+    setIsNightMode,
+}) {
     const isAuth = Boolean(currentUser?.id);
     const hasPhone = Boolean(phone);
 
     return (
         <Routes>
-            {/* авторизация */}
             <Route
                 path="/"
                 element={<Navigate to={isAuth ? "/chat" : "/phone"} replace />}
@@ -25,8 +31,6 @@ export default function AppRouter({ currentUser, setCurrentUser, phone, setPhone
                 }
             />
 
-
-
             <Route
                 path="/code"
                 element={
@@ -36,18 +40,18 @@ export default function AppRouter({ currentUser, setCurrentUser, phone, setPhone
                             ? <Code setCurrentUser={setCurrentUser} />
                             : <Navigate to="/phone" replace />
                 }
-
-
             />
 
-
-            {/* защищенные маршруты */}
             <Route
                 path="/chat"
                 element={
                     isAuth
                         ? (
-                            <AppFrame currentUser={currentUser}>
+                            <AppFrame
+                                currentUser={currentUser}
+                                isNightMode={isNightMode}
+                                setIsNightMode={setIsNightMode}
+                            >
                                 <Chat currentUser={currentUser} />
                             </AppFrame>
                         )
@@ -60,7 +64,11 @@ export default function AppRouter({ currentUser, setCurrentUser, phone, setPhone
                 element={
                     isAuth
                         ? (
-                            <AppFrame currentUser={currentUser}>
+                            <AppFrame
+                                currentUser={currentUser}
+                                isNightMode={isNightMode}
+                                setIsNightMode={setIsNightMode}
+                            >
                                 <Settings currentUser={currentUser} />
                             </AppFrame>
                         )
@@ -73,7 +81,11 @@ export default function AppRouter({ currentUser, setCurrentUser, phone, setPhone
                 element={
                     isAuth
                         ? (
-                            <AppFrame currentUser={currentUser}>
+                            <AppFrame
+                                currentUser={currentUser}
+                                isNightMode={isNightMode}
+                                setIsNightMode={setIsNightMode}
+                            >
                                 <Profile currentUser={currentUser} />
                             </AppFrame>
                         )
@@ -81,7 +93,6 @@ export default function AppRouter({ currentUser, setCurrentUser, phone, setPhone
                 }
             />
 
-            {/* fallback */}
             <Route
                 path="*"
                 element={<Navigate to={isAuth ? "/chat" : "/phone"} replace />}

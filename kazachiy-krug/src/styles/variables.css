@@ -4,5 +4,15 @@
     --color-primary: #1f2a33;
     --color-accent: #7a2e2e;
     --color-muted: #7b7b7b;
+    --border-light: #ddd6cc;
     --radius: 16px;
+}
+
+:root[data-theme="dark"] {
+    --bg-main: #1c1c1c;
+    --bg-card: #252525;
+    --color-primary: #e6e6e6;
+    --color-muted: #9a9a9a;
+    --color-accent: #7a2e2e;
+    --border-light: #3a3a3a;
 }

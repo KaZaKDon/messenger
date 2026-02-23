@@ -7,10 +7,14 @@ const mutedItems = [
     { key: "calls", icon: "📞", label: "Звонки" },
     { key: "fav", icon: "⭐", label: "Избранное" },
     { key: "contacts", icon: "👥", label: "Контакты" },
-    { key: "night", icon: "🌙", label: "Ночной режим" },
 ];
 
-export default function AppSidebar({ currentUser, onDisabledClick }) {
+export default function AppSidebar({
+    currentUser,
+    onDisabledClick,
+    isNightMode = false,
+    onNightModeChange,
+}) {
     const name = currentUser?.name ?? "Пользователь";
 
     return (
@@ -61,6 +65,17 @@ export default function AppSidebar({ currentUser, onDisabledClick }) {
                             <span>{item.label}</span>
                         </button>
                     ))}
+
+                    <label className="app-sidebar-link night-mode">
+                        <span>🌙</span>
+                        <span>Ночной режим</span>
+                        <span className="night-mode-state">{isNightMode ? "Вкл" : "Выкл"}</span>
+                        <input
+                            type="checkbox"
+                            checked={isNightMode}
+                            onChange={(event) => onNightModeChange?.(event.target.checked)}
+                        />
+                    </label>
                 </nav>
             </div>
 

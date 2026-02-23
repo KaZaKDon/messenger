@@ -1,7 +1,7 @@
 .profile-page {
     height: 100%;
     padding: 28px;
-    background: #f4f1ec;
+    background: var(--bg-main);
 }
 
 .profile-page-header h1 {
@@ -11,15 +11,15 @@
 
 .profile-page-header p {
     margin-top: 8px;
-    color: #6f6b65;
+    color: var(--color-muted);
     font-size: 18px;
 }
 
 .profile-card {
     margin-top: 22px;
     max-width: 760px;
-    background: #fff;
-    border: 1px solid #e2ddd5;
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
     border-radius: 18px;
     padding: 22px;
     display: flex;
@@ -30,7 +30,7 @@
     width: 90px;
     height: 90px;
     border-radius: 50%;
-    background: #7f2330;
+    background: var(--color-accent);
     color: #fff;
     display: flex;
     align-items: center;
@@ -52,7 +52,7 @@
 }
 
 .profile-row .label {
-    color: #7d7770;
+    color: var(--color-muted);
     font-size: 14px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -60,7 +60,7 @@
 
 .profile-row strong {
     font-size: 22px;
-    color: #251f1a;
+    color: var(--color-primary);
 }
 
 .profile-row .online {

@@ -1,0 +1,92 @@
+.settings-page {
+    height: 100%;
+    padding: 28px;
+    background: var(--bg-main);
+}
+
+.settings-header h1 {
+    margin: 0;
+    font-size: 32px;
+}
+
+.settings-header p {
+    margin-top: 8px;
+    color: var(--color-muted);
+    font-size: 18px;
+}
+
+.settings-tabs {
+    display: flex;
+    gap: 10px;
+    margin-top: 22px;
+}
+
+.settings-tab {
+    border: 1px solid var(--border-light);
+    background: var(--bg-card);
+    border-radius: 999px;
+    padding: 10px 16px;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.settings-tab.active {
+    background: var(--color-accent);
+    color: #fff;
+    border-color: var(--color-accent);
+}
+
+.settings-panel {
+    margin-top: 16px;
+    max-width: 760px;
+}
+
+.settings-section {
+    border: 1px solid var(--border-light);
+    border-radius: 18px;
+    background: var(--bg-card);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.settings-section h2 {
+    margin: 0;
+}
+
+.settings-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.settings-field span {
+    color: var(--color-muted);
+    font-size: 14px;
+}
+
+.settings-field input {
+    height: 40px;
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    padding: 0 12px;
+    font-size: 16px;
+}
+
+.settings-action {
+    align-self: flex-start;
+    border: 0;
+    border-radius: 10px;
+    background: var(--color-accent);
+    color: #fff;
+    padding: 10px 16px;
+    cursor: pointer;
+}
+
+.settings-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 16px;
+}

@@ -73,11 +73,14 @@
     flex: 1;
     display: flex;
     flex-direction: column;
+    background: var(--bg-main);
+    color: var(--color-primary);
 }
 
 .chat-header {
     padding: 14px 16px;
-    border-bottom: 1px solid #ddd;
+    border-bottom: 1px solid var(--border-light);
+    background: var(--chat-panel-bg);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -93,8 +96,8 @@
     width: 40px;
     height: 40px;
     border-radius: 50%;
-    background: #ececec;
-    border: 1px solid #d8d8d8;
+    background: color-mix(in srgb, var(--bg-card) 80%, var(--bg-main));
+    border: 1px solid var(--border-light);
     flex-shrink: 0;
 }
 
@@ -113,7 +116,7 @@
 
 .chat-type {
     font-size: 18px;
-    color: #7a7a7a;
+    color: var(--color-muted);
 }
 
 .chat-messages {
@@ -125,7 +128,8 @@
     display: flex;
     gap: 8px;
     padding: 10px;
-    border-top: 1px solid #ddd;
+    border-top: 1px solid var(--border-light);
+    background: var(--chat-panel-bg);
     align-items: flex-end;
 }
 
@@ -155,7 +159,7 @@
 }
 
 .emoji-btn:hover:not(:disabled) {
-    background: #f7f5f2;
+    background: color-mix(in srgb, var(--bg-card) 70%, var(--bg-main));
 }
 
 /* Панель эмодзи как popover */
@@ -191,7 +195,7 @@
 }
 
 .emoji-item:hover {
-    background: #f0ece7;
+    background: color-mix(in srgb, var(--bg-card) 55%, var(--bg-main));
 }
 
 .emoji-item:active {
@@ -200,7 +204,9 @@
 
 .chat-input textarea {
     flex: 1;
-    border: 1px solid #d7d7d7;
+    border: 1px solid var(--border-light);
+    background: var(--bg-card);
+    color: var(--color-primary);
     border-radius: 8px;
     padding: 10px 12px;
     font: inherit;
@@ -213,7 +219,7 @@
     border: none;
     border-radius: 8px;
     padding: 0 16px;
-    background: #8f2d3b;
+    background: var(--color-accent);
     color: #fff;
     cursor: pointer;
 }
@@ -230,6 +236,7 @@
     padding: 16px;
     display: flex;
     flex-direction: column;
+    background: var(--bg-main);
 }
 
 .messages {
@@ -249,13 +256,15 @@
 
 .incoming {
     align-self: flex-start;
-    background: #eee;
+    background: var(--chat-incoming-bg);
+    color: var(--color-primary);
     text-align: left;
 }
 
 .outgoing {
     align-self: flex-end;
-    background: #cce5ff;
+    background: var(--chat-outgoing-bg);
+    color: var(--color-primary);
     text-align: right;
 }
 
@@ -283,11 +292,11 @@
 }
 
 .message-status.sent {
-    color: #999;
+    color: var(--color-muted);
 }
 
 .message-status.delivered {
-    color: #999;
+    color: var(--color-muted);
 }
 
 .message-status.read {
@@ -323,7 +332,7 @@
     display: flex;
     gap: 6px;
     font-size: 13px;
-    color: #777;
+    color: var(--color-muted);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -341,18 +350,18 @@
 
 .chat-typing {
     font-size: 12px;
-    color: #888;
+    color: var(--color-muted);
 }
 
 .chat-typing-row {
     padding: 4px 16px 0;
     font-size: 12px;
-    color: #888;
+    color: var(--color-muted);
 }
 
 .user-list {
     width: 220px;
-    border-right: 1px solid #eee;
+    border-right: 1px solid var(--border-light);
     padding: 12px;
     display: flex;
     flex-direction: column;
@@ -368,7 +377,7 @@
 
 .user-list-search input {
     width: 100%;
-    border: 1px solid #ddd;
+    border: 1px solid var(--border-light);
     border-radius: 6px;
     padding: 8px 10px;
     font-size: 14px;
@@ -378,7 +387,7 @@
     border: none;
     border-radius: 6px;
     padding: 8px 10px;
-    background: #8f2d3b;
+    background: var(--color-accent);
     color: #fff;
     cursor: pointer;
 }
@@ -393,14 +402,14 @@
 }
 
 .user-item.active {
-    background: #f3f3f3;
+    background: color-mix(in srgb, var(--bg-card) 60%, var(--bg-main));
 }
 
 .user-status {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #bbb;
+    background: var(--color-muted);
 }
 
 .user-status.online {
@@ -408,29 +417,29 @@
 }
 
 .user-status.offline {
-    background: #bbb;
+    background: var(--color-muted);
 }
 
 .chat-empty-placeholder {
     margin: auto;
-    color: #777;
+    color: var(--color-muted);
     font-size: 14px;
 }
 
 .user-list-empty {
     margin-top: 8px;
-    color: #888;
+    color: var(--color-muted);
     font-size: 13px;
 }
 
 .dialog-list {
     width: 320px;
-    border-right: 1px solid #eee;
+    border-right: 1px solid var(--border-light);
     padding: 12px;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    background: #fafafa;
+    background: var(--bg-main);
 }
 
 .dialog-search {
@@ -442,7 +451,7 @@
 
 .dialog-search input {
     width: 100%;
-    border: 1px solid #ddd;
+    border: 1px solid var(--border-light);
     border-radius: 8px;
     padding: 10px 12px;
     font-size: 14px;
@@ -452,25 +461,25 @@
     border: none;
     border-radius: 8px;
     padding: 10px 12px;
-    background: #8f2d3b;
+    background: var(--color-accent);
     color: #fff;
     cursor: pointer;
 }
 
 .dialog-card {
-    border: 1px solid #eee;
+    border: 1px solid var(--border-light);
     border-radius: 10px;
     padding: 10px;
     display: flex;
     flex-direction: column;
     gap: 6px;
     cursor: pointer;
-    background: #fff;
+    background: var(--bg-card);
 }
 
 .dialog-card.active {
-    border-color: #8f2d3b;
-    background: #fff8fa;
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--bg-card) 82%, var(--color-accent));
 }
 
 .dialog-card.empty {
@@ -499,7 +508,7 @@
 }
 
 .dialog-preview {
-    color: #666;
+    color: var(--color-muted);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -508,14 +517,14 @@
 
 .dialog-time {
     font-size: 12px;
-    color: #888;
+    color: var(--color-muted);
 }
 
 .dialog-unread {
     min-width: 20px;
     height: 20px;
     border-radius: 10px;
-    background: #8f2d3b;
+    background: var(--color-accent);
     color: #fff;
     font-size: 12px;
     display: inline-flex;
@@ -526,15 +535,15 @@
 
 .dialog-empty-badge {
     font-size: 11px;
-    color: #8f2d3b;
-    border: 1px solid #d8a4ad;
+    color: var(--color-accent);
+    border: 1px solid var(--border-light);
     border-radius: 10px;
     padding: 2px 6px;
     white-space: nowrap;
 }
 
 .dialog-empty {
-    color: #888;
+    color: var(--color-muted);
     font-size: 13px;
     margin-top: 8px;
 }
@@ -549,7 +558,7 @@
 .chat-header-actions button {
     border: none;
     background: transparent;
-    color: #666;
+    color: var(--color-muted);
     font-size: 22px;
     cursor: pointer;
 }
@@ -671,7 +680,7 @@
 }
 
 .announce-card.other {
-    border-left: 4px solid #d0d0d0;
+    border-left: 4px solid var(--border-light);
 }
 
 /* ----- header ----- */
@@ -744,7 +753,7 @@
 }
 
 .announce-card-btn:hover {
-    background: #642222;
+    background: color-mix(in srgb, var(--color-accent) 80%, black);
     transform: translateY(-1px);
 }
 
@@ -758,7 +767,7 @@
 
 .announce-cta {
     padding: 16px;
-    background: linear-gradient(to top, #ffffff 70%, transparent);
+    background: linear-gradient(to top, color-mix(in srgb, var(--bg-card) 100%, transparent) 70%, transparent);
     position: sticky;
     bottom: 0;
 }
@@ -777,7 +786,7 @@
 }
 
 .announce-cta-btn:hover {
-    background: #642222;
+    background: color-mix(in srgb, var(--color-accent) 80%, black);
     transform: translateY(-1px);
 }
 

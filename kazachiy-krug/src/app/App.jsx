@@ -2,6 +2,7 @@ import {  useEffect,useState } from "react";
 import AppRouter from "./router";
 
 import { connectSocket } from "../shared/socket";
+
 export default function App() {
     const [currentUser, setCurrentUser] = useState(() => {
         try {
@@ -12,12 +13,21 @@ export default function App() {
             return null;
         }
     });
+
     const [phone, setPhone] = useState(() => {
         try {
             return sessionStorage.getItem("phone") ?? "";
         } catch {
             sessionStorage.removeItem("phone");
             return "";
+        }
+    });
+
+    const [isNightMode, setIsNightMode] = useState(() => {
+        try {
+            return localStorage.getItem("theme") === "dark";
+        } catch {
+            return false;
         }
     });
 
@@ -56,6 +66,18 @@ export default function App() {
         });
     }, [currentUser]);
 
+    useEffect(() => {
+        const theme = isNightMode ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", theme);
+
+        try {
+            localStorage.setItem("theme", theme);
+        } catch {
+            // ignore storage errors
+        }
+    }, [isNightMode]);
+
+
 
     return (
         <div className="app">
@@ -64,6 +86,8 @@ export default function App() {
                 setCurrentUser={setCurrentUser}
                 phone={phone}
                 setPhone={setPhone}
+                isNightMode={isNightMode}
+                setIsNightMode={setIsNightMode}
             />
         </div>
     );

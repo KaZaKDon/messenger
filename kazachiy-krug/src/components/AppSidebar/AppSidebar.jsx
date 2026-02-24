@@ -3,13 +3,23 @@ import logo from "../../screens/Phone/icon.jpg";
 import "./AppSidebar.css";
 
 const mutedItems = [
+    { key: "my-ads", icon: "🧾", label: "Мои объявления" },
     { key: "calls", icon: "📞", label: "Звонки" },
     { key: "fav", icon: "⭐", label: "Избранное" },
     { key: "contacts", icon: "👥", label: "Контакты" },
-];
+].filter((item) => item.key !== "night");
 
-export default function AppSidebar({ currentUser, onDisabledClick }) {
+export default function AppSidebar({
+    currentUser,
+    onDisabledClick,
+    isNightMode = false,
+    onNightModeChange,
+}) {
     const name = currentUser?.name ?? "Пользователь";
+
+    const toggleNightMode = () => {
+        onNightModeChange?.(!isNightMode);
+    };
 
     return (
         <aside className="app-sidebar">
@@ -28,6 +38,16 @@ export default function AppSidebar({ currentUser, onDisabledClick }) {
                 </div>
 
                 <nav className="app-sidebar-nav">
+                    <NavLink
+                        to="/chat"
+                        className={({ isActive }) =>
+                            `app-sidebar-link ${isActive ? "active" : ""}`
+                        }
+                    >
+                        <span>💬</span>
+                        <span>Круг Чат</span>
+                    </NavLink>
+
                     <NavLink
                         to="/profile"
                         className={({ isActive }) =>
@@ -49,6 +69,22 @@ export default function AppSidebar({ currentUser, onDisabledClick }) {
                             <span>{item.label}</span>
                         </button>
                     ))}
+
+                    <button
+                        type="button"
+                        className="app-sidebar-link night-mode-toggle"
+                        onClick={toggleNightMode}
+                        aria-pressed={isNightMode}
+                        aria-label="Переключить ночной режим"
+                    >
+                        <span>🌙</span>
+                        <span>Ночной режим</span>
+                        <span className="night-mode-state">{isNightMode ? "Вкл" : "Выкл"}</span>
+                        <span
+                            className={`night-mode-check ${isNightMode ? "checked" : ""}`}
+                            aria-hidden="true"
+                        />
+                    </button>
                 </nav>
             </div>
 

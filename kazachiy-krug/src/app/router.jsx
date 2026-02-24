@@ -7,7 +7,13 @@ import Settings from "../screens/Settings/Settings";
 import Profile from "../screens/Profile/Profile";
 import AppFrame from "../layouts/AppFrame";
 
-export default function AppRouter({ currentUser, setCurrentUser, phone, setPhone }) {
+export default function AppRouter({ currentUser,
+    setCurrentUser,
+    phone,
+    setPhone,
+    isNightMode,
+    setIsNightMode,
+}) {
     const isAuth = Boolean(currentUser?.id);
     const hasPhone = Boolean(phone);
 
@@ -40,8 +46,6 @@ export default function AppRouter({ currentUser, setCurrentUser, phone, setPhone
 
             />
 
-
-            {/* защищенные маршруты */}
             <Route
                 path="/chat"
                 element={
@@ -61,10 +65,15 @@ export default function AppRouter({ currentUser, setCurrentUser, phone, setPhone
                 element={
                     isAuth
                         ? (
-                            <AppFrame currentUser={currentUser}>
+                            <AppFrame
+                                currentUser={currentUser}
+                                isNightMode={isNightMode}
+                                setIsNightMode={setIsNightMode}
+                            >
                                 <Settings currentUser={currentUser} />
                             </AppFrame>
                         )
+
 
                         : <Navigate to="/phone" replace />
                 }
@@ -75,16 +84,20 @@ export default function AppRouter({ currentUser, setCurrentUser, phone, setPhone
                 element={
                     isAuth
                         ? (
-                            <AppFrame currentUser={currentUser}>
+                            <AppFrame
+                                currentUser={currentUser}
+                                isNightMode={isNightMode}
+                                setIsNightMode={setIsNightMode}
+                            >
                                 <Profile currentUser={currentUser} />
                             </AppFrame>
                         )
+
 
                         : <Navigate to="/phone" replace />
                 }
             />
 
-            {/* fallback */}
             <Route
                 path="*"
                 element={<Navigate to={isAuth ? "/chat" : "/phone"} replace />}

@@ -13,15 +13,13 @@ export function useChatSocket(
         const socket = getSocket();
         if (!socket) return;
 
-        if (!currentUser?.id) {
-            socket.userListRequested = false;
-            return;
-        }
+        if (!currentUser?.id) return;
 
-        if (!socket.userListRequested) {
-            socket.userListRequested = true;
-            socket.emit("users:get");
-        }
+        // ВАЖНО: запрашиваем список при каждом входе на экран чата.
+        // Иначе после перехода в /profile или /settings и обратно
+        // список кругов/чатов может остаться пустым.
+        socket.emit("users:get");
+
 
         const onUsers = (users) => {
             console.log("📥 users from socket:", users);

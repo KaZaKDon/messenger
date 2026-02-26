@@ -1,9 +1,51 @@
 .app-frame {
     display: flex;
     min-height: 100vh;
+    position: relative;
 }
 
 .app-frame-content {
     flex: 1;
     min-width: 0;
+}
+
+.app-frame-drawer-button {
+    display: none;
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    z-index: 130;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    background: var(--bg-card);
+    color: var(--color-primary);
+    font-size: 22px;
+    cursor: pointer;
+}
+
+.app-frame-backdrop {
+    display: none;
+}
+
+@media (max-width: 1199px) {
+    .app-frame {
+        min-height: 100dvh;
+    }
+
+    .app-frame-drawer-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .app-frame-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        border: 0;
+        background: rgba(0, 0, 0, 0.45);
+        z-index: 115;
+    }
 }

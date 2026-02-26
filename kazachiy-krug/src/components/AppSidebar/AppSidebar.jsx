@@ -7,22 +7,39 @@ const mutedItems = [
     { key: "calls", icon: "📞", label: "Звонки" },
     { key: "fav", icon: "⭐", label: "Избранное" },
     { key: "contacts", icon: "👥", label: "Контакты" },
-].filter((item) => item.key !== "night");
+]
 
 export default function AppSidebar({
     currentUser,
     onDisabledClick,
     isNightMode = false,
     onNightModeChange,
+    isOpen = false,
+    onNavigate,
+
 }) {
     const name = currentUser?.name ?? "Пользователь";
 
-    const toggleNightMode = () => {
+    const handleDisabledSectionClick = () => {
+        onDisabledClick?.();
+        onNavigate?.();
+    };
+
+    const handleNightModeToggle = () => {
+
         onNightModeChange?.(!isNightMode);
     };
 
     return (
-        <aside className="app-sidebar">
+        <aside className={`app-sidebar ${isOpen ? "open" : ""}`}>
+            <button
+                type="button"
+                className="app-sidebar-close"
+                onClick={onNavigate}
+                aria-label="Закрыть меню"
+            >
+                ✕
+            </button>
             <div className="app-sidebar-top">
                 <div className="app-brand">
                     <img src={logo} alt="Казачий круг" className="app-brand-logo" />
@@ -43,6 +60,7 @@ export default function AppSidebar({
                         className={({ isActive }) =>
                             `app-sidebar-link ${isActive ? "active" : ""}`
                         }
+                        onClick={onNavigate}
                     >
                         <span>💬</span>
                         <span>Круг Чат</span>
@@ -53,6 +71,7 @@ export default function AppSidebar({
                         className={({ isActive }) =>
                             `app-sidebar-link ${isActive ? "active" : ""}`
                         }
+                        onClick={onNavigate}
                     >
                         <span>👤</span>
                         <span>Мой профиль</span>
@@ -63,7 +82,7 @@ export default function AppSidebar({
                             key={item.key}
                             type="button"
                             className="app-sidebar-link muted"
-                            onClick={onDisabledClick}
+                            onClick={handleDisabledSectionClick}
                         >
                             <span>{item.icon}</span>
                             <span>{item.label}</span>
@@ -73,7 +92,8 @@ export default function AppSidebar({
                     <button
                         type="button"
                         className="app-sidebar-link night-mode-toggle"
-                        onClick={toggleNightMode}
+                        onClick={handleNightModeToggle}
+
                         aria-pressed={isNightMode}
                         aria-label="Переключить ночной режим"
                     >
@@ -92,7 +112,8 @@ export default function AppSidebar({
                 <button
                     type="button"
                     className="app-sidebar-link muted"
-                    onClick={onDisabledClick}
+                    onClick={handleDisabledSectionClick}
+
                 >
                     <span>ℹ️</span>
                     <span>О приложении</span>
@@ -103,6 +124,7 @@ export default function AppSidebar({
                     className={({ isActive }) =>
                         `app-sidebar-link ${isActive ? "active" : ""}`
                     }
+                    onClick={onNavigate}
                 >
                     <span>⚙️</span>
                     <span>Настройки</span>

@@ -106,6 +106,7 @@ export default function Chat({ currentUser }) {
     return (
         <div className="chat-main">
                 <DialogList
+                className={activeChatUserId ? "hidden-mobile" : ""}
                     currentUserId={currentUser.id}
                     users={users.filter((user) => user.id !== currentUser.id)}
                     chats={chats}
@@ -121,6 +122,12 @@ export default function Chat({ currentUser }) {
                 />
 
                 <ChatWindow
+                className={!activeChatUserId ? "hidden-mobile" : ""}
+                    onBackToList={() => {
+                        stopTyping();
+                        dispatch({ type: "SET_ACTIVE_CHAT_USER", payload: null });
+                    }}
+
                     key={activeChatUserId ?? "no-chat"}
                     chat={activeChat}
                     activeUser={activeUser}

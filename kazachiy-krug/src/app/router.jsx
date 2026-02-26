@@ -51,7 +51,11 @@ export default function AppRouter({ currentUser,
                 element={
                     isAuth
                         ? (
-                            <AppFrame currentUser={currentUser}>
+                            <AppFrame
+                                currentUser={currentUser}
+                                isNightMode={isNightMode}
+                                setIsNightMode={setIsNightMode}
+                            >
                                 <Chat currentUser={currentUser} />
                             </AppFrame>
                         )

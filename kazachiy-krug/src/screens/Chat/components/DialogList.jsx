@@ -29,6 +29,7 @@ export default function DialogList({
     chats,
     activeUserId,
     onSelect,
+    className = "",
 }) {
     const [query, setQuery] = useState("");
 
@@ -92,7 +93,7 @@ export default function DialogList({
     }, [chats, currentUserId, query, users]);
 
     return (
-        <aside className="dialog-list">
+        <aside className={`dialog-list ${className}`.trim()}>
             <div className="dialog-search">
                 <input
                     type="text"

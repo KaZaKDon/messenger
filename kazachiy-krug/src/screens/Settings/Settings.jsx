@@ -1,42 +1,68 @@
 import { useState } from "react";
-import Notifications from "./Notifications";
-import SettingsProfile from "./Profile";
-import Security from "./Security";
 import "./settings.css";
 
-const TABS = [
-    { id: "profile", title: "Профиль" },
-    { id: "security", title: "Безопасность" },
-    { id: "notifications", title: "Уведомления" },
+const SETTINGS_ITEMS = [
+    { id: "privacy", icon: "🔒", title: "Приватность" },
+    { id: "notifications", icon: "🔔", title: "Уведомления" },
+    { id: "appearance", icon: "🎨", title: "Внешний вид" },
+    { id: "chat-media", icon: "🖼️", title: "Чаты и медиа" },
+    { id: "calls", icon: "👥", title: "Звонки" },
 ];
 
-export default function Settings({ currentUser }) {
-    const [activeTab, setActiveTab] = useState("profile");
+
+export default function Settings() {
+    const [openedItem, setOpenedItem] = useState(null);
+
 
     return (
         <section className="settings-page">
             <header className="settings-header">
                 <h1>Настройки</h1>
-                <p>Управление профилем и поведением приложения</p>
             </header>
-
-            <div className="settings-tabs" role="tablist" aria-label="settings tabs">
-                {TABS.map((tab) => (
-                    <button
-                        key={tab.id}
-                        type="button"
-                        className={`settings-tab ${activeTab === tab.id ? "active" : ""}`}
-                        onClick={() => setActiveTab(tab.id)}
-                    >
-                        {tab.title}
-                    </button>
-                ))}
-            </div>
             <div className="settings-panel">
-                {activeTab === "profile" ? <SettingsProfile currentUser={currentUser} /> : null}
-                {activeTab === "security" ? <Security /> : null}
-                {activeTab === "notifications" ? <Notifications /> : null}
+                <ul className="settings-list" aria-label="Список настроек">
+                    {SETTINGS_ITEMS.map((item) => (
+                        <li key={item.id}>
+                            <button
+                                type="button"
+                                className="settings-list-item"
+                                onClick={() => setOpenedItem(item)}
+                            >
+                                <span className="settings-list-main">
+                                    <span className="settings-list-icon" aria-hidden="true">
+                                        {item.icon}
+                                    </span>
+                                    <span>{item.title}</span>
+                                </span>
+                                <span className="settings-list-arrow" aria-hidden="true">
+                                    ›
+                                </span>
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+
+                <button type="button" className="settings-delete-btn">
+                    ⦿ Удалить аккаунт
+                </button>
             </div>
+
+            {openedItem ? (
+                <div className="settings-modal-backdrop" role="presentation">
+                    <div className="settings-modal" role="dialog" aria-modal="true">
+                        <h2>{openedItem.title}</h2>
+                        <div className="settings-modal-body" />
+                        <button
+                            type="button"
+                            className="settings-action"
+                            onClick={() => setOpenedItem(null)}
+                        >
+                            Сохранить
+                        </button>
+                    </div>
+                </div>
+            ) : null}
+
         </section>
     );
 }

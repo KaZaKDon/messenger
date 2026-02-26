@@ -20,6 +20,9 @@ export default function ChatWindow({
     onTypingStart,
     onTypingStop,
     onWriteToAuthor, // ✅ новый колбэк
+    className = "",
+    onBackToList,
+
 }) {
     const endRef = useRef(null);
     const typingRef = useRef(false);
@@ -234,9 +237,18 @@ export default function ChatWindow({
         : "чат не выбран";
 
     return (
-        <section className="chat-window">
+        <section className={`chat-window ${className}`.trim()}>
             <header className="chat-header">
                 <div className="chat-header-main">
+                    <button
+                        type="button"
+                        className="chat-back-btn"
+                        onClick={onBackToList}
+                        aria-label="Назад к списку кругов"
+                    >
+                        ←
+                    </button>
+
                     <div className="chat-avatar" aria-hidden="true" />
                     <div className="chat-header-text">
                         <h2>{hasSelectedChat ? activeUser?.name ?? "Чат" : "Чат не выбран"}</h2>

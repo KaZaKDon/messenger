@@ -20,12 +20,17 @@
     },
     "homepage": "https://github.com/KaZaKDon/kazachiy-krug-server#readme",
     "dependencies": {
+        "@prisma/client": "^6.16.2",
         "cors": "^2.8.5",
         "express": "^5.2.1",
         "multer": "^2.0.2",
         "socket.io": "^4.8.3"
     },
     "devDependencies": {
-        "nodemon": "^3.1.11"
+        "nodemon": "^3.1.11",
+        "prisma": "^6.16.2"
+    },
+    "prisma": {
+        "seed": "node prisma/seed.js"
     }
 }

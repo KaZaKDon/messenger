@@ -1,0 +1,104 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ChatType {
+  private
+  group
+}
+
+enum GroupMode {
+  readonly
+  announcements
+  chat
+}
+
+enum MessageStatus {
+  sent
+  delivered
+  read
+}
+
+model User {
+  id        String       @id
+  name      String
+  phone     String       @unique
+  avatar    String?
+  createdAt DateTime     @default(now())
+
+  memberships ChatMember[]
+  messages    Message[]
+  settings    UserSettings?
+
+  @@map("users")
+}
+
+model Chat {
+  id        String      @id
+  type      ChatType
+  title     String?
+  createdAt DateTime    @default(now())
+
+  members   ChatMember[]
+  messages  Message[]
+  groupRule GroupRule?
+
+  @@map("chats")
+}
+
+model ChatMember {
+  chatId    String
+  userId    String
+  role      String      @default("member")
+  joinedAt  DateTime    @default(now())
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([chatId, userId])
+  @@index([userId])
+  @@map("chat_members")
+}
+
+model Message {
+  id        String        @id @default(cuid())
+  chatId    String
+  senderId  String
+  text      String
+  imageUrl  String?
+  imageUrls Json?         // поддержка массива картинок
+  status    MessageStatus @default(sent)
+  createdAt DateTime      @default(now())
+
+  chat   Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender User @relation(fields: [senderId], references: [id], onDelete: Restrict)
+
+  @@index([chatId, createdAt])
+  @@index([senderId])
+  @@map("messages")
+}
+
+model UserSettings {
+  userId               String   @id
+  theme                String   @default("light")
+  notificationsEnabled Boolean  @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+model GroupRule {
+  chatId                         String    @id
+  mode                           GroupMode @default(chat)
+  requiresAnnouncementWithImage  Boolean   @default(false)
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@map("group_rules")
+}

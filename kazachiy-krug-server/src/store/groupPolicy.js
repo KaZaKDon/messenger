@@ -25,6 +25,8 @@ const GROUP_CONFIG = [
 
     // group-11: обычный общий чат
     { id: "group-11", title: "ПОБОЛТАЕМ", mode: "chat" },
+    // group-12: закрытая группа "010" (видят только user-1 и user-3)
+    { id: "group-12", title: "010", mode: "chat", members: ["user-1", "user-7"], canPublish: ["user-1", "user-7"] },
 ];
 
 const ANNOUNCEMENT_MODE_ENABLED = true;
@@ -32,10 +34,15 @@ const ANNOUNCEMENT_MODE_ENABLED = true;
 function buildGroup(cfg = {}) {
     const id = cfg.id;
 
-    // по умолчанию писать могут все участники,
-    // но для readonly мы ожидаем явный canPublish
+    // NEW: если members задан, используем его; иначе все пользователи
+    const members =
+        Array.isArray(cfg.members) && cfg.members.length > 0
+            ? cfg.members
+            : ALL_USERS;
+
+    // NEW: по умолчанию писать могут только участники этой группы
     const canPublish =
-        Array.isArray(cfg.canPublish) ? cfg.canPublish : ALL_USERS;
+        Array.isArray(cfg.canPublish) ? cfg.canPublish : members;
 
     const mode = cfg.mode ?? "chat";
 
@@ -44,7 +51,7 @@ function buildGroup(cfg = {}) {
         roomId: id,
         title: cfg.title,
         mode,
-        members: ALL_USERS,
+        members,
         canPublish,
         requiresAnnouncementWithImage:
             cfg.requiresAnnouncementWithImage ?? mode === "announcements",

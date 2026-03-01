@@ -73,7 +73,7 @@ async function main() {
 
     const allUsers = users.map((u) => u.id);
     const restrictedGroupId = "group-12";
-    const restrictedMembers = ["user-1", "user-3"];
+    const restrictedMembers = ["user-1", "user-7"];
 
     const privateMembers = [
         { chatId: "room-user-1-user-2", userId: "user-1", role: "member" },

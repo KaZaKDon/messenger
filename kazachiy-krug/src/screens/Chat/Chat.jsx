@@ -103,6 +103,27 @@ export default function Chat({ currentUser }) {
         socket.emit("typing:stop", { chatId: activeChatId });
     };
 
+    const loadOlderMessages = () => {
+        if (!activeChatId || !activeChat) return;
+        if (activeChat.historyLoading || !activeChat.hasMoreHistory) return;
+
+        const oldestMessage = activeChat.messages?.[0];
+        if (!oldestMessage?.createdAt) return;
+
+        const socket = getSocket();
+        if (!socket) return;
+
+        dispatch({
+            type: "CHAT_HISTORY_LOADING",
+            payload: { chatId: activeChatId, loading: true },
+        });
+
+        socket.emit("chat:history", {
+            chatId: activeChatId,
+            beforeCreatedAt: oldestMessage.createdAt,
+        });
+    };
+
     return (
         <div className="chat-main">
                 <DialogList
@@ -146,6 +167,7 @@ export default function Chat({ currentUser }) {
                     }}
                     onTypingStart={startTyping}
                     onTypingStop={stopTyping}
+                    onLoadOlderMessages={loadOlderMessages}
                 />
 
         </div>

@@ -18,7 +18,8 @@ function ensureChat(state, chatId) {
             members: [],
             membersInfo: [],
             otherUser: null,
-
+            hasMoreHistory: false,
+            historyLoading: false,
             messages: [],
             draft: "",
             typingUsers: [],
@@ -77,6 +78,7 @@ export function chatReducer(state, action) {
                 membersInfo,
                 otherUser,
                 canPublish,
+                hasMoreHistory,
             } = action.payload || {};
 
             if (!chatId) return state;
@@ -96,11 +98,85 @@ export function chatReducer(state, action) {
                         members: members ?? chats[chatId].members ?? [],
                         membersInfo: membersInfo ?? chats[chatId].membersInfo ?? [],
                         otherUser: otherUser ?? chats[chatId].otherUser ?? null,
-
+                        hasMoreHistory: hasMoreHistory ?? false,
+                        historyLoading: false,
                         messages,
                         typingUsers: chats[chatId].typingUsers ?? [],
                     },
                 },
+            };
+        }
+        case "CHAT_HISTORY_LOADING": {
+            const { chatId, loading } = action.payload || {};
+            if (!chatId) return state;
+
+            const chats = ensureChat(state, chatId);
+            const chat = chats[chatId];
+
+            return {
+                ...state,
+                chats: {
+                    ...chats,
+                    [chatId]: {
+                        ...chat,
+                        historyLoading: Boolean(loading),
+                    },
+                },
+            };
+        }
+
+        case "PREPEND_CHAT_HISTORY": {
+            const { chatId, messages = [], hasMoreHistory = false } = action.payload || {};
+            if (!chatId) return state;
+
+            const chats = ensureChat(state, chatId);
+            const chat = chats[chatId];
+            const existingIds = new Set((chat.messages ?? []).map((m) => m.id));
+            const uniqueMessages = messages.filter((m) => m?.id && !existingIds.has(m.id));
+
+            return {
+                ...state,
+                chats: {
+                    ...chats,
+                    [chatId]: {
+                        ...chat,
+                        messages: [...uniqueMessages, ...(chat.messages ?? [])],
+                        hasMoreHistory: Boolean(hasMoreHistory),
+                        historyLoading: false,
+                    },
+                },
+            };
+        }
+
+        case "CHAT_HISTORY_ERROR": {
+            const { chatId } = action.payload || {};
+
+            if (chatId) {
+                const chats = ensureChat(state, chatId);
+                const chat = chats[chatId];
+
+                return {
+                    ...state,
+                    chats: {
+                        ...chats,
+                        [chatId]: {
+                            ...chat,
+                            historyLoading: false,
+                        },
+                    },
+                };
+            }
+
+            const chats = Object.fromEntries(
+                Object.entries(state.chats).map(([id, chat]) => [
+                    id,
+                    { ...chat, historyLoading: false },
+                ])
+            );
+
+            return {
+                ...state,
+                chats,
             };
         }
 

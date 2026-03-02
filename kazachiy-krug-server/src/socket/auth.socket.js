@@ -3,6 +3,9 @@ import { onlineUsers } from "../store/onlineUsers.js";
 import { GROUP_RULES } from "../store/groupPolicy.js";
 import { chats } from "../store/chats.js";
 import { prisma } from "../db/prisma.js";
+import { SOCKET_MEMORY_FALLBACK_ENABLED } from "../config/runtimeFlags.js";
+
+
 
 function emitPresence(io, userId, isOnline) {
     io.emit("user:online", { userId, isOnline });
@@ -56,7 +59,7 @@ async function getUserByIdDb(userId) {
     });
 }
 
-function authenticateSocketUser(io, socket, user, extra = {}) {
+async function authenticateSocketUser(io, socket, user, extra = {}) {
     socket.data.isAuth = true;
     socket.data.userId = user.id;
     socket.data.userName = user.name;
@@ -65,7 +68,15 @@ function authenticateSocketUser(io, socket, user, extra = {}) {
     onlineUsers.set(user.id, socket.id);
     emitPresence(io, user.id, true);
 
-    joinUserGroupRooms(socket);
+    try {
+        await joinUserGroupRoomsDb(socket);
+    } catch (error) {
+        console.error("joinUserGroupRooms db failed, fallback to memory:", error?.message ?? error);
+
+        if (SOCKET_MEMORY_FALLBACK_ENABLED) {
+            joinUserGroupRoomsMemory(socket);
+        }
+    }
 
     socket.emit("auth:success", {
         id: user.id,
@@ -157,7 +168,32 @@ async function listFromDb(currentUserId) {
  * Тогда socket.to(chatId).emit(...) будет доставляться всем онлайн-участникам,
  * даже если круг не открыт на фронте.
  */
-function joinUserGroupRooms(socket) {
+async function joinUserGroupRoomsDb(socket) {
+    const userId = socket.data.userId;
+    if (!userId) return;
+
+    const groups = await prisma.chat.findMany({
+        where: {
+            type: "group",
+            members: {
+                some: {
+                    userId,
+                },
+            },
+        },
+        select: {
+            id: true,
+        },
+    });
+
+    for (const group of groups) {
+        if (group?.id && !socket.rooms.has(group.id)) {
+            socket.join(group.id);
+        }
+    }
+}
+
+function joinUserGroupRoomsMemory(socket) {
     const userId = socket.data.userId;
     if (!userId) return;
 
@@ -190,11 +226,15 @@ export function authSocket(io, socket) {
             user = await getUserByPhoneDb(phone);
             if (user) {
                 console.log(`✅ AUTH via DB: ${user.name} (${user.id})`);
-                authenticateSocketUser(io, socket, user);
+                await authenticateSocketUser(io, socket, user);
                 return;
             }
         } catch (error) {
             console.error("auth:phone db failed, fallback to memory:", error?.message ?? error);
+            if (!SOCKET_MEMORY_FALLBACK_ENABLED) {
+                socket.emit("auth:error", { message: "Auth service is temporarily unavailable" });
+                return;
+            }
         }
 
         console.log("📞 PHONE FROM CLIENT:", phone);
@@ -209,7 +249,7 @@ export function authSocket(io, socket) {
         }
 
         console.log(`✅ AUTH via memory fallback: ${user.name} (${user.id})`);
-        authenticateSocketUser(io, socket, user);
+        await authenticateSocketUser(io, socket, user);
     };
 
 
@@ -228,11 +268,16 @@ export function authSocket(io, socket) {
             user = await getUserByIdDb(userId);
             if (user) {
                 console.log(`♻️ AUTH RESTORED via DB: ${user.name} (${user.id})`);
-                authenticateSocketUser(io, socket, user, { restored: true });
+                await authenticateSocketUser(io, socket, user, { restored: true });
                 return;
             }
         } catch (error) {
             console.error("auth:restore db failed, fallback to memory:", error?.message ?? error);
+            if (!SOCKET_MEMORY_FALLBACK_ENABLED) {
+                socket.emit("auth:error", { message: "Auth restore is temporarily unavailable" });
+                return;
+            }
+
         }
 
         user = usersById[userId];
@@ -242,7 +287,7 @@ export function authSocket(io, socket) {
         }
 
         console.log(`♻️ AUTH RESTORED via memory fallback: ${user.name} (${user.id})`);
-        authenticateSocketUser(io, socket, user, { restored: true });
+        await authenticateSocketUser(io, socket, user, { restored: true });
     });
 
 
@@ -254,6 +299,11 @@ export function authSocket(io, socket) {
             socket.emit("users:list", list);
         } catch (error) {
             console.error("users:get fallback to memory:", error?.message ?? error);
+            if (!SOCKET_MEMORY_FALLBACK_ENABLED) {
+                socket.emit("users:error", { message: "Users list is temporarily unavailable" });
+                return;
+            }
+
             socket.emit("users:list", listFromMemory(socket.data.userId));
         }
     });

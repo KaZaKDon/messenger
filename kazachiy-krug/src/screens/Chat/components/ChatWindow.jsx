@@ -20,6 +20,7 @@ export default function ChatWindow({
     onTypingStart,
     onTypingStop,
     onWriteToAuthor, // ✅ новый колбэк
+    onLoadOlderMessages,
     className = "",
     onBackToList,
 
@@ -27,6 +28,13 @@ export default function ChatWindow({
     const endRef = useRef(null);
     const typingRef = useRef(false);
     const stopTypingTimeout = useRef(null);
+    const autoLoadThrottleRef = useRef(0);
+    const prevMessagesMetaRef = useRef({
+        chatId: null,
+        firstId: null,
+        lastId: null,
+        length: 0,
+    });
 
     // ✅ emoji UI
     const [emojiOpen, setEmojiOpen] = useState(false);
@@ -38,6 +46,9 @@ export default function ChatWindow({
         // при смене чата всегда возвращаемся на ленту
         setAnnouncementMode("feed");
     }, [chat?.id]);
+
+    const hasMoreHistory = Boolean(chat?.hasMoreHistory);
+    const historyLoading = Boolean(chat?.historyLoading);
 
     const emojiList = useMemo(
         () => [
@@ -118,10 +129,46 @@ export default function ChatWindow({
         }
     }
 
+    const handleMessagesScroll = useCallback(
+        (event) => {
+            if (!hasSelectedChat || !hasMoreHistory || historyLoading) return;
+
+            if (event.currentTarget.scrollTop > 48) return;
+
+            const now = Date.now();
+            if (now - autoLoadThrottleRef.current < 500) return;
+            autoLoadThrottleRef.current = now;
+
+            onLoadOlderMessages?.();
+        },
+        [hasMoreHistory, hasSelectedChat, historyLoading, onLoadOlderMessages]
+    );
+
     useEffect(() => {
-        if (!endRef.current) return;
-        endRef.current.scrollIntoView({ block: "end", behavior: "smooth" });
-    }, [chat?.messages?.length, announcementMode]);
+        const messages = chat?.messages ?? [];
+        const firstId = messages[0]?.id ?? null;
+        const lastId = messages.length ? messages[messages.length - 1]?.id ?? null : null;
+
+        const prev = prevMessagesMetaRef.current;
+        const sameChat = prev.chatId === (chat?.id ?? null);
+        const isHistoryPrepend =
+            sameChat &&
+            messages.length > prev.length &&
+            firstId !== prev.firstId &&
+            lastId === prev.lastId;
+
+        if (!isHistoryPrepend && endRef.current) {
+            endRef.current.scrollIntoView({ block: "end", behavior: "smooth" });
+        }
+
+        prevMessagesMetaRef.current = {
+            chatId: chat?.id ?? null,
+            firstId,
+            lastId,
+            length: messages.length,
+        };
+    }, [announcementMode, chat?.id, chat?.messages]);
+
 
     const stopTypingNow = useCallback(() => {
         if (stopTypingTimeout.current) clearTimeout(stopTypingTimeout.current);
@@ -271,7 +318,18 @@ export default function ChatWindow({
                     {/* FEED */}
                     {announcementMode === "feed" ? (
                         <>
-                            <div className="messages">
+                            <div className="messages" onScroll={handleMessagesScroll}>
+                                {hasSelectedChat && hasMoreHistory ? (
+                                    <button
+                                        type="button"
+                                        className="history-load-more"
+                                        onClick={onLoadOlderMessages}
+                                        disabled={historyLoading}
+                                    >
+                                        {historyLoading ? "Загружаем..." : "Показать более ранние объявления"}
+                                    </button>
+                                ) : null}
+
                                 {!hasSelectedChat ? (
                                     <div className="chat-empty-placeholder">
                                         Выберите круг слева, чтобы посмотреть объявления
@@ -334,10 +392,32 @@ export default function ChatWindow({
                 </>
             ) : (
                 /* =======================
-                   ОБЫЧНЫЕ ЧАТЫ (ЛИЧКА + ПОБОЛТАЕМ)
-                   ======================= */
+                ОБЫЧНЫЕ ЧАТЫ (ЛИЧКА + ПОБОЛТАЕМ)
+                ======================= */
                 <>
-                    <div className="messages">
+                    <div className="messages" onScroll={handleMessagesScroll}>
+                        {hasSelectedChat && hasMoreHistory ? (
+                            <button
+                                type="button"
+                                className="history-load-more"
+                                onClick={onLoadOlderMessages}
+                                disabled={historyLoading}
+                            >
+                                {historyLoading ? "Загружаем..." : "Показать более ранние сообщения"}
+                            </button>
+                        ) : null}
+
+                        {hasSelectedChat && hasMoreHistory ? (
+                            <button
+                                type="button"
+                                className="history-load-more"
+                                onClick={onLoadOlderMessages}
+                                disabled={historyLoading}
+                            >
+                                {historyLoading ? "Загружаем..." : "Показать более ранние сообщения"}
+                            </button>
+                        ) : null}
+
                         {!hasSelectedChat ? (
                             <div className="chat-empty-placeholder">
                                 Выберите контакт слева, чтобы начать диалог

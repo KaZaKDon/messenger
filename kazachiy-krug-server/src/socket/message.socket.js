@@ -1,32 +1,22 @@
-import { prisma } from "../db/prisma.js";
-import { chats } from "../store/chats.js";
-import { onlineUsers } from "../store/onlineUsers.js";
 import {
-    canPublishToGroup,
-    validateGroupMessage,
-    getGroupRuleByChatId,
-} from "../store/groupPolicy.js";
+    prisma
+} from "../db/prisma.js";
+import {
+    chats
+} from "../store/chats.js";
+import {
+    onlineUsers
+} from "../store/onlineUsers.js";
+import {
+    SOCKET_MEMORY_FALLBACK_ENABLED
+} from "../config/runtimeFlags.js";
 
 function isGroupId(id) {
     return typeof id === "string" && id.startsWith("group-");
 }
 
 function ensureGroupChatExists(chatId) {
-    if (chats[chatId]) return chats[chatId];
-
-    const rule = getGroupRuleByChatId(chatId);
-    if (!rule) return null;
-
-    chats[chatId] = {
-        id: chatId,
-        type: "group",
-        members: rule.members,
-        messages: [],
-        typingUsers: [],
-    };
-
-    console.log("🧩 created group chat in store:", chatId);
-    return chats[chatId];
+    return chats[chatId] ?? null;
 }
 
 function deliverToOnlineMembers(io, senderUserId, memberIds, eventName, payload) {
@@ -59,6 +49,71 @@ async function getChatContextDb(chatId, userId) {
     });
 }
 
+async function getChatMemberIdsDb(chatId, userId) {
+    const chat = await prisma.chat.findFirst({
+        where: {
+            id: chatId,
+            members: {
+                some: {
+                    userId,
+                },
+            },
+        },
+        select: {
+            members: {
+                select: {
+                    userId: true,
+                },
+            },
+        },
+    });
+
+    return chat?.members?.map((member) => member.userId) ?? null;
+}
+
+async function getGroupRuleDb(chatId) {
+    return prisma.groupRule.findUnique({
+        where: { chatId },
+        select: {
+            mode: true,
+            requiresAnnouncementWithImage: true,
+            publishUserIds: true,
+        },
+    });
+}
+
+function canPublishToGroupByRule(rule, userId) {
+    if (!rule) return true;
+
+    if (Array.isArray(rule.publishUserIds)) {
+        return rule.publishUserIds.includes(userId);
+    }
+
+    if (rule.mode === "chat") return true;
+    if (rule.mode === "announcements") return true;
+
+    return false;
+}
+
+function validateGroupMessageByRule(rule, message) {
+    if (!rule) return { ok: true };
+    if (rule.mode !== "announcements") return { ok: true };
+    if (!rule.requiresAnnouncementWithImage) return { ok: true };
+
+    const hasText = typeof message?.text === "string" && message.text.trim().length > 0;
+    const hasSingle = typeof message?.imageUrl === "string" && message.imageUrl.trim().length > 0;
+    const hasMany = Array.isArray(message?.imageUrls) && message.imageUrls.filter(Boolean).length > 0;
+
+    if (!hasText || (!hasSingle && !hasMany)) {
+        return {
+            ok: false,
+            reason: "Для групп 4–10 требуется формат: объявление + картинка (text + imageUrl).",
+        };
+    }
+
+    return { ok: true };
+}
+
 function runMessageSendMemory(io, socket, message) {
     const chatId = message?.chatId;
     if (!chatId) return;
@@ -73,7 +128,10 @@ function runMessageSendMemory(io, socket, message) {
     }
 
     if (!chat.members.includes(socket.data.userId)) {
-        console.log("⛔ drop: sender not member", { chatId, userId: socket.data.userId });
+        console.log("⛔ drop: sender not member", {
+            chatId,
+            userId: socket.data.userId
+        });
         socket.emit("message:error", {
             chatId,
             messageId: message?.id,
@@ -84,27 +142,7 @@ function runMessageSendMemory(io, socket, message) {
     }
 
     if (chat.type === "group") {
-        if (!canPublishToGroup(chatId, socket.data.userId)) {
-            socket.emit("message:error", {
-                chatId,
-                messageId: message?.id,
-                reason: "У вас нет прав на публикацию в этой группе.",
-            });
-
-            return;
-        }
-
-        const validation = validateGroupMessage(chatId, message);
-        if (!validation.ok) {
-            console.log("❌ group validation failed", { chatId, reason: validation.reason });
-            socket.emit("message:error", {
-                chatId,
-                messageId: message?.id,
-                reason: validation.reason,
-            });
-
-            return;
-        }
+        // memory fallback: не применяем store-based group policy
     }
 
     const serverMessage = {
@@ -121,7 +159,10 @@ function runMessageSendMemory(io, socket, message) {
     console.log(`📩 [${chatId}] ${socket.data.userName}: ${serverMessage.text ?? ""}`);
 
     deliverToOnlineMembers(io, socket.data.userId, chat.members, "message:new", serverMessage);
-    socket.emit("message:delivered", { chatId, messageId: serverMessage.id });
+    socket.emit("message:delivered", {
+        chatId,
+        messageId: serverMessage.id
+    });
 }
 
 function runMessageReadMemory(io, socket, chatId, messageId) {
@@ -136,7 +177,10 @@ function runMessageReadMemory(io, socket, chatId, messageId) {
 
     msg.status = "read";
 
-    deliverToOnlineMembers(io, socket.data.userId, chat.members, "message:read", { chatId, messageId });
+    deliverToOnlineMembers(io, socket.data.userId, chat.members, "message:read", {
+        chatId,
+        messageId
+    });
 }
 
 export function messageSocket(io, socket) {
@@ -166,7 +210,9 @@ export function messageSocket(io, socket) {
             }
 
             if (chat.type === "group") {
-                if (!canPublishToGroup(chatId, socket.data.userId)) {
+                const rule = await getGroupRuleDb(chatId);
+
+                if (!canPublishToGroupByRule(rule, socket.data.userId)) {
                     socket.emit("message:error", {
                         chatId,
                         messageId: message?.id,
@@ -175,7 +221,7 @@ export function messageSocket(io, socket) {
                     return;
                 }
 
-                const validation = validateGroupMessage(chatId, message);
+                const validation = validateGroupMessageByRule(rule, message);
                 if (!validation.ok) {
                     socket.emit("message:error", {
                         chatId,
@@ -187,7 +233,9 @@ export function messageSocket(io, socket) {
             }
             const created = await prisma.message.create({
                 data: {
-                    ...(typeof message?.id === "string" && message.id ? { id: message.id } : {}),
+                    ...(typeof message?.id === "string" && message.id ? {
+                        id: message.id
+                    } : {}),
                     chatId,
                     senderId: socket.data.userId,
                     text: typeof message?.text === "string" ? message.text : "",
@@ -220,14 +268,29 @@ export function messageSocket(io, socket) {
             const memberIds = chat.members.map((member) => member.userId);
             deliverToOnlineMembers(io, socket.data.userId, memberIds, "message:new", serverMessage);
 
-            socket.emit("message:delivered", { chatId, messageId: serverMessage.id });
+            socket.emit("message:delivered", {
+                chatId,
+                messageId: serverMessage.id
+            });
         } catch (error) {
             console.error("message:send db failed, fallback to memory:", error?.message ?? error);
+            if (!SOCKET_MEMORY_FALLBACK_ENABLED) {
+                socket.emit("message:error", {
+                    chatId,
+                    messageId: message?.id,
+                    reason: "Message service is temporarily unavailable.",
+                });
+                return;
+            }
+
             runMessageSendMemory(io, socket, message);
         }
     });
 
-    socket.on("message:read", async ({ chatId, messageId }) => {
+    socket.on("message:read", async ({
+        chatId,
+        messageId
+    }) => {
         if (!socket.data.isAuth) return;
         if (!chatId || !messageId) return;
 
@@ -236,7 +299,9 @@ export function messageSocket(io, socket) {
             if (!chat) return;
 
             const msg = await prisma.message.findUnique({
-                where: { id: messageId },
+                where: {
+                    id: messageId
+                },
                 select: {
                     id: true,
                     chatId: true,
@@ -248,8 +313,12 @@ export function messageSocket(io, socket) {
             if (!msg || msg.chatId !== chatId || msg.senderId === socket.data.userId) return;
 
             await prisma.message.update({
-                where: { id: messageId },
-                data: { status: "read" },
+                where: {
+                    id: messageId
+                },
+                data: {
+                    status: "read"
+                },
             });
 
 
@@ -258,45 +327,107 @@ export function messageSocket(io, socket) {
                 if (memoryMsg) memoryMsg.status = "read";
             }
             const memberIds = chat.members.map((member) => member.userId);
-            deliverToOnlineMembers(io, socket.data.userId, memberIds, "message:read", { chatId, messageId });
+            deliverToOnlineMembers(io, socket.data.userId, memberIds, "message:read", {
+                chatId,
+                messageId
+            });
         } catch (error) {
             console.error("message:read db failed, fallback to memory:", error?.message ?? error);
+            if (!SOCKET_MEMORY_FALLBACK_ENABLED) {
+                socket.emit("message:error", {
+                    chatId,
+                    messageId,
+                    reason: "Message read status is temporarily unavailable.",
+                });
+                return;
+            }
+
             runMessageReadMemory(io, socket, chatId, messageId);
-
         }
     });
 
-    socket.on("typing:start", ({ chatId }) => {
+    socket.on("typing:start", async ({
+        chatId
+    }) => {
         if (!socket.data.isAuth) return;
+        if (!chatId) return;
 
-        let chat = chats[chatId];
-        if (!chat && isGroupId(chatId)) chat = ensureGroupChatExists(chatId);
-        if (!chat) return;
 
-        if (!chat.members.includes(socket.data.userId)) return;
+        try {
+            const memberIds = await getChatMemberIdsDb(chatId, socket.data.userId);
+            if (!memberIds) return;
 
-        for (const memberId of chat.members) {
-            if (memberId === socket.data.userId) continue;
-            const sid = onlineUsers.get(memberId);
-            if (!sid) continue;
-            io.to(sid).emit("typing:start", { chatId, userId: socket.data.userId });
+            for (const memberId of memberIds) {
+                if (memberId === socket.data.userId) continue;
+                const sid = onlineUsers.get(memberId);
+                if (!sid) continue;
+                io.to(sid).emit("typing:start", {
+                    chatId,
+                    userId: socket.data.userId
+                });
+            }
+        } catch (error) {
+            console.error("typing:start db failed, fallback to memory:", error?.message ?? error);
+            if (!SOCKET_MEMORY_FALLBACK_ENABLED) return;
+
+            let chat = chats[chatId];
+            if (!chat && isGroupId(chatId)) chat = ensureGroupChatExists(chatId);
+            if (!chat) return;
+            if (!chat.members.includes(socket.data.userId)) return;
+
+            for (const memberId of chat.members) {
+                if (memberId === socket.data.userId) continue;
+                const sid = onlineUsers.get(memberId);
+                if (!sid) continue;
+                io.to(sid).emit("typing:start", {
+                    chatId,
+                    userId: socket.data.userId
+                });
+            }
         }
     });
 
-    socket.on("typing:stop", ({ chatId }) => {
+    socket.on("typing:stop", async ({
+        chatId
+    }) => {
         if (!socket.data.isAuth) return;
+        if (!chatId) return;
 
-        let chat = chats[chatId];
-        if (!chat && isGroupId(chatId)) chat = ensureGroupChatExists(chatId);
-        if (!chat) return;
 
-        if (!chat.members.includes(socket.data.userId)) return;
+        try {
+            const memberIds = await getChatMemberIdsDb(chatId, socket.data.userId);
+            if (!memberIds) return;
 
-        for (const memberId of chat.members) {
-            if (memberId === socket.data.userId) continue;
-            const sid = onlineUsers.get(memberId);
-            if (!sid) continue;
-            io.to(sid).emit("typing:stop", { chatId, userId: socket.data.userId });
+            for (const memberId of memberIds) {
+                if (memberId === socket.data.userId) continue;
+                const sid = onlineUsers.get(memberId);
+                if (!sid) continue;
+                io.to(sid).emit("typing:stop", {
+                    chatId,
+                    userId: socket.data.userId
+                });
+            }
+        } catch (error) {
+            console.error("typing:stop db failed, fallback to memory:", error?.message ?? error);
+
+
+            if (!SOCKET_MEMORY_FALLBACK_ENABLED) return;
+
+            let chat = chats[chatId];
+            if (!chat && isGroupId(chatId)) chat = ensureGroupChatExists(chatId);
+            if (!chat) return;
+            if (!chat.members.includes(socket.data.userId)) return;
+
+            for (const memberId of chat.members) {
+                if (memberId === socket.data.userId) continue;
+                const sid = onlineUsers.get(memberId);
+                if (!sid) continue;
+                io.to(sid).emit("typing:stop", {
+                    chatId,
+                    userId: socket.data.userId
+                });
+            }
+
         }
     });
 }

@@ -15,18 +15,19 @@ const GROUP_CONFIG = [
     { id: "group-3", title: "Музеи", mode: "readonly", canPublish: ["user-1"] },
 
     // group-4..10: объявления (требуем текст + картинку)
-    { id: "group-4", title: "Домашние животные", mode: "announcements", requiresAnnouncementWithImage: true },
-    { id: "group-5", title: "Сад и Огород", mode: "announcements", requiresAnnouncementWithImage: true },
-    { id: "group-6", title: "Сельскохозяйственные животные", mode: "announcements", requiresAnnouncementWithImage: true },
-    { id: "group-7", title: "Транспорт", mode: "announcements", requiresAnnouncementWithImage: true },
-    { id: "group-8", title: "Строительство Стройматериалы", mode: "announcements", requiresAnnouncementWithImage: true },
-    { id: "group-9", title: "Личные вещи", mode: "announcements", requiresAnnouncementWithImage: true },
-    { id: "group-10", title: "Услуги", mode: "announcements", requiresAnnouncementWithImage: true },
+    { id: "group-4", title: "Недвижимость", mode: "announcements", requiresAnnouncementWithImage: true },
+    { id: "group-5", title: "Домашние животные", mode: "announcements", requiresAnnouncementWithImage: true },
+    { id: "group-6", title: "Сад и Огород", mode: "announcements", requiresAnnouncementWithImage: true },
+    { id: "group-7", title: "Сельскохозяйственные животные", mode: "announcements", requiresAnnouncementWithImage: true },
+    { id: "group-8", title: "Транспорт", mode: "announcements", requiresAnnouncementWithImage: true },
+    { id: "group-9", title: "Строительство Стройматериалы", mode: "announcements", requiresAnnouncementWithImage: true },
+    { id: "group-10", title: "Личные вещи", mode: "announcements", requiresAnnouncementWithImage: true },
+    { id: "group-11", title: "Услуги", mode: "announcements", requiresAnnouncementWithImage: true },
 
     // group-11: обычный общий чат
-    { id: "group-11", title: "ПОБОЛТАЕМ", mode: "chat" },
+    { id: "group-12", title: "ПОБОЛТАЕМ", mode: "chat" },
     // group-12: закрытая группа "010" (видят только user-1 и user-3)
-    { id: "group-12", title: "010", mode: "chat", members: ["user-1", "user-7"], canPublish: ["user-1", "user-7"] },
+    { id: "group-13", title: "010", mode: "chat", members: ["user-1", "user-7"], canPublish: ["user-1", "user-7"] },
 ];
 
 const ANNOUNCEMENT_MODE_ENABLED = true;

@@ -51,6 +51,7 @@ export function useChatSocket(
             const {
                 chatId,
                 messages = [],
+                hasMoreHistory,
                 type,
                 title,
                 members,
@@ -64,6 +65,7 @@ export function useChatSocket(
                 payload: {
                     chatId,
                     messages,
+                    hasMoreHistory,
                     type,
                     title,
                     members,
@@ -81,6 +83,54 @@ export function useChatSocket(
             socket.off("chat:opened", onChatOpened);
         };
     }, [activeChatUserId, currentUser?.id, dispatch]);
+
+    // --- HISTORY PAGINATION ---
+    useEffect(() => {
+        const socket = getSocket();
+        if (!socket) return;
+
+        const onHistory = ({ chatId, messages = [], hasMoreHistory = false }) => {
+            if (!chatId) return;
+
+            dispatch({
+                type: "PREPEND_CHAT_HISTORY",
+                payload: {
+                    chatId,
+                    messages,
+                    hasMoreHistory,
+                },
+            });
+        };
+
+        socket.on("chat:history", onHistory);
+
+        return () => {
+            socket.off("chat:history", onHistory);
+        };
+    }, [dispatch]);
+
+    useEffect(() => {
+        const socket = getSocket();
+        if (!socket) return;
+
+        const onChatError = ({ message } = {}) => {
+            dispatch({
+                type: "CHAT_HISTORY_ERROR",
+                payload: { chatId: activeChatId ?? null },
+            });
+
+            if (message) {
+                alert(message);
+            }
+        };
+
+        socket.on("chat:error", onChatError);
+
+        return () => {
+            socket.off("chat:error", onChatError);
+        };
+    }, [activeChatId, dispatch]);
+
 
     // --- JOIN + MESSAGE LISTENERS (PRIVATE + GROUP) ---
     useEffect(() => {

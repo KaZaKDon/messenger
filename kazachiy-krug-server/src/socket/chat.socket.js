@@ -8,20 +8,59 @@ import {
     getOrCreatePrivateChat
 } from "../store/chatHelpers.js";
 import {
-    canPublishToGroup,
-    getGroupRuleByChatId
-} from "../store/groupPolicy.js";
-import {
     usersById
 } from "../store/users.js";
+import { SOCKET_MEMORY_FALLBACK_ENABLED } from "../config/runtimeFlags.js";
+
+const HISTORY_PAGE_SIZE = 50;
+
+function normalizeCursor(value) {
+    if (value == null) return null;
+
+    if (typeof value === "number" && Number.isFinite(value)) {
+        return new Date(value);
+    }
+
+    if (typeof value === "string" && value.trim()) {
+        const date = new Date(value);
+        if (!Number.isNaN(date.getTime())) return date;
+    }
+
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+        return value;
+    }
+
+    return null;
+}
 
 function isGroupId(id) {
     return typeof id === "string" && id.startsWith("group-");
 }
 
-function isAnnouncementGroup(id) {
-    if (!isGroupId(id)) return false;
-    return getGroupRuleByChatId(id)?.mode === "announcements";
+async function getGroupRuleDb(chatId) {
+    return prisma.groupRule.findUnique({
+        where: { chatId },
+        select: {
+            mode: true,
+            requiresAnnouncementWithImage: true,
+            publishUserIds: true,
+        },
+    });
+}
+
+async function canPublishToGroupDb(chatId, userId) {
+    const rule = await getGroupRuleDb(chatId);
+
+    if (!rule) return true;
+
+    if (Array.isArray(rule.publishUserIds)) {
+        return rule.publishUserIds.includes(userId);
+    }
+
+    if (rule.mode === "chat") return true;
+    if (rule.mode === "announcements") return true;
+
+    return false;
 }
 
 function buildPrivateChatId(userA, userB) {
@@ -54,8 +93,41 @@ function mapDbMessages(messages = []) {
         imageUrl: message.imageUrl,
         imageUrls: message.imageUrls,
         status: message.status,
-        createdAt: message.createdAt,
+        createdAt: message.createdAt instanceof Date ? message.createdAt.getTime() : message.createdAt,
     }));
+}
+
+async function getChatMessagesPageDb(chatId, beforeCreatedAt = null, pageSize = HISTORY_PAGE_SIZE) {
+    const cursor = normalizeCursor(beforeCreatedAt);
+
+    const messages = await prisma.message.findMany({
+        where: {
+            chatId,
+            ...(cursor ? { createdAt: { lt: cursor } } : {}),
+        },
+        orderBy: {
+            createdAt: "desc",
+        },
+        take: pageSize + 1,
+        select: {
+            id: true,
+            chatId: true,
+            senderId: true,
+            text: true,
+            imageUrl: true,
+            imageUrls: true,
+            status: true,
+            createdAt: true,
+        },
+    });
+
+    const hasMoreHistory = messages.length > pageSize;
+    const page = hasMoreHistory ? messages.slice(0, pageSize) : messages;
+
+    return {
+        messages: mapDbMessages(page.reverse()),
+        hasMoreHistory,
+    };
 }
 
 async function upsertPrivateChatDb(currentUserId, targetUserId) {
@@ -129,33 +201,21 @@ async function getGroupChatPayloadDb(chatId, currentUserId) {
                     userId: true,
                 },
             },
-            messages: {
-                orderBy: {
-                    createdAt: "asc"
-                },
-                take: 200,
-                select: {
-                    id: true,
-                    chatId: true,
-                    senderId: true,
-                    text: true,
-                    imageUrl: true,
-                    imageUrls: true,
-                    status: true,
-                    createdAt: true,
-                },
-            },
         },
     });
 
     if (!groupChat) return null;
+    const history = await getChatMessagesPageDb(chatId);
+
+    const canPublish = await canPublishToGroupDb(groupChat.id, currentUserId);
 
     return {
         chatId: groupChat.id,
         title: groupChat.title,
         type: groupChat.type,
         members: groupChat.members.map((m) => m.userId),
-        messages: mapDbMessages(groupChat.messages),
+        messages: history.messages,
+        hasMoreHistory: history.hasMoreHistory,
         canPublish: canPublishToGroup(groupChat.id, currentUserId),
     };
 }
@@ -182,26 +242,11 @@ async function getPrivateChatPayloadDb(currentUserId, targetUserId) {
                     },
                 },
             },
-            messages: {
-                orderBy: {
-                    createdAt: "asc"
-                },
-                take: 200,
-                select: {
-                    id: true,
-                    chatId: true,
-                    senderId: true,
-                    text: true,
-                    imageUrl: true,
-                    imageUrls: true,
-                    status: true,
-                    createdAt: true,
-                },
-            },
         },
     });
 
     if (!chat) return null;
+    const history = await getChatMessagesPageDb(chatId);
 
     const membersInfo = chat.members.map(({
         user
@@ -215,15 +260,13 @@ async function getPrivateChatPayloadDb(currentUserId, targetUserId) {
         members,
         membersInfo,
         otherUser,
-        messages: mapDbMessages(chat.messages),
+        messages: history.messages,
+        hasMoreHistory: history.hasMoreHistory,
     };
 }
 
 function openGroupFromMemory(socket, chatId, eventName) {
-    const groupRule = getGroupRuleByChatId(chatId);
-    if (!groupRule) return false;
-
-    const groupChat = chats[groupRule.roomId];
+    const groupChat = chats[chatId];
     if (!groupChat) return true;
     if (!groupChat.members.includes(socket.data.userId)) return true;
 
@@ -233,7 +276,7 @@ function openGroupFromMemory(socket, chatId, eventName) {
         type: groupChat.type,
         members: groupChat.members,
         messages: groupChat.messages,
-        canPublish: canPublishToGroup(groupChat.id, socket.data.userId),
+        canPublish: true,
     });
 
     return true;
@@ -285,6 +328,10 @@ export function chatSocket(io, socket) {
             socket.emit("chat:open", privatePayload);
         } catch (error) {
             console.error("chat:create db failed, fallback to memory:", error?.message ?? error);
+            if (!SOCKET_MEMORY_FALLBACK_ENABLED) {
+                socket.emit("chat:error", { message: "Chat service is temporarily unavailable" });
+                return;
+            }
 
             if (isGroupId(targetUserId)) {
                 openGroupFromMemory(socket, targetUserId, "chat:open");
@@ -317,6 +364,11 @@ export function chatSocket(io, socket) {
             socket.emit("chat:opened", privatePayload);
         } catch (error) {
             console.error("chat:open db failed, fallback to memory:", error?.message ?? error);
+            if (!SOCKET_MEMORY_FALLBACK_ENABLED) {
+                socket.emit("chat:error", { message: "Chat service is temporarily unavailable" });
+                return;
+            }
+
 
             if (isGroupId(targetUserId)) {
                 openGroupFromMemory(socket, targetUserId, "chat:opened");
@@ -325,7 +377,48 @@ export function chatSocket(io, socket) {
 
             openPrivateFromMemory(socket, currentUserId, targetUserId, "chat:opened");
         }
+    });
 
+    socket.on("chat:history", async ({ chatId, beforeCreatedAt }) => {
+        if (!socket.data.isAuth) return;
+        if (!chatId) return;
+
+        try {
+            const chat = await prisma.chat.findFirst({
+                where: {
+                    id: chatId,
+                    OR: [
+                        {
+                            members: {
+                                some: {
+                                    userId: socket.data.userId,
+                                },
+                            },
+                        },
+                        {
+                            groupRule: {
+                                is: {
+                                    mode: "announcements",
+                                },
+                            },
+                        },
+                    ],
+                },
+                select: { id: true },
+            });
+
+            if (!chat) return;
+
+            const history = await getChatMessagesPageDb(chatId, beforeCreatedAt);
+            socket.emit("chat:history", {
+                chatId,
+                messages: history.messages,
+                hasMoreHistory: history.hasMoreHistory,
+            });
+        } catch (error) {
+            console.error("chat:history db failed:", error?.message ?? error);
+            socket.emit("chat:error", { message: "Chat history is temporarily unavailable" });
+        }
     });
 
     socket.on("join:chat", async ({ chatId }) => {
@@ -364,11 +457,16 @@ export function chatSocket(io, socket) {
             return;
         } catch (error) {
             console.error("join:chat db failed, fallback to memory:", error?.message ?? error);
+            if (!SOCKET_MEMORY_FALLBACK_ENABLED) {
+                socket.emit("chat:error", { message: "Chat service is temporarily unavailable" });
+                return;
+            }
+
         }
 
         const chat = chats[chatId];
         if (!chat) return;
-        if (!chat.members.includes(socket.data.userId) && !isAnnouncementGroup(chatId)) return;
+        if (!chat.members.includes(socket.data.userId)) return;
         socket.join(chatId);
         console.log(`👥 ${socket.data.userName} joined ${chatId}`);
     });

@@ -27,15 +27,16 @@ async function main() {
         { id: "group-1", type: ChatType.group, title: "Нужное" },
         { id: "group-2", type: ChatType.group, title: "Администрация" },
         { id: "group-3", type: ChatType.group, title: "Музеи" },
-        { id: "group-4", type: ChatType.group, title: "Домашние животные" },
-        { id: "group-5", type: ChatType.group, title: "Сад и Огород" },
-        { id: "group-6", type: ChatType.group, title: "Сельскохозяйственные животные" },
-        { id: "group-7", type: ChatType.group, title: "Транспорт" },
-        { id: "group-8", type: ChatType.group, title: "Строительство Стройматериалы" },
-        { id: "group-9", type: ChatType.group, title: "Личные вещи" },
-        { id: "group-10", type: ChatType.group, title: "Услуги" },
-        { id: "group-11", type: ChatType.group, title: "ПОБОЛТАЕМ" },
-        { id: "group-12", type: ChatType.group, title: "010" },
+        { id: "group-4", type: ChatType.group, title: "Недвижимость " },
+        { id: "group-5", type: ChatType.group, title: "Домашние животные" },
+        { id: "group-6", type: ChatType.group, title: "Сад и Огород" },
+        { id: "group-7", type: ChatType.group, title: "Сельскохозяйственные животные" },
+        { id: "group-8", type: ChatType.group, title: "Транспорт" },
+        { id: "group-9", type: ChatType.group, title: "Строительство Стройматериалы" },
+        { id: "group-10", type: ChatType.group, title: "Личные вещи" },
+        { id: "group-11", type: ChatType.group, title: "Услуги" },
+        { id: "group-12", type: ChatType.group, title: "ПОБОЛТАЕМ" },
+        { id: "group-13", type: ChatType.group, title: "010" },
     ];
 
     for (const c of chats) {
@@ -47,9 +48,10 @@ async function main() {
     }
 
     const groupRules = [
-        { chatId: "group-1", mode: GroupMode.readonly, requiresAnnouncementWithImage: false },
-        { chatId: "group-2", mode: GroupMode.readonly, requiresAnnouncementWithImage: false },
-        { chatId: "group-3", mode: GroupMode.readonly, requiresAnnouncementWithImage: false },
+        { chatId: "group-1", mode: GroupMode.readonly, requiresAnnouncementWithImage: false, publishUserIds: ["user-1"] },
+        { chatId: "group-2", mode: GroupMode.readonly, requiresAnnouncementWithImage: false, publishUserIds: ["user-1"] },
+        { chatId: "group-3", mode: GroupMode.readonly, requiresAnnouncementWithImage: false, publishUserIds: ["user-1"] },
+
 
         { chatId: "group-4", mode: GroupMode.announcements, requiresAnnouncementWithImage: true },
         { chatId: "group-5", mode: GroupMode.announcements, requiresAnnouncementWithImage: true },
@@ -58,15 +60,20 @@ async function main() {
         { chatId: "group-8", mode: GroupMode.announcements, requiresAnnouncementWithImage: true },
         { chatId: "group-9", mode: GroupMode.announcements, requiresAnnouncementWithImage: true },
         { chatId: "group-10", mode: GroupMode.announcements, requiresAnnouncementWithImage: true },
+        { chatId: "group-11", mode: GroupMode.announcements, requiresAnnouncementWithImage: true },
 
-        { chatId: "group-11", mode: GroupMode.chat, requiresAnnouncementWithImage: false },
         { chatId: "group-12", mode: GroupMode.chat, requiresAnnouncementWithImage: false },
+        { chatId: "group-13", mode: GroupMode.chat, requiresAnnouncementWithImage: false },
     ];
 
     for (const gr of groupRules) {
         await prisma.groupRule.upsert({
             where: { chatId: gr.chatId },
-            update: { mode: gr.mode, requiresAnnouncementWithImage: gr.requiresAnnouncementWithImage },
+            update: {
+                mode: gr.mode,
+                requiresAnnouncementWithImage: gr.requiresAnnouncementWithImage,
+                publishUserIds: gr.publishUserIds ?? null,
+            },
             create: gr,
         });
     }

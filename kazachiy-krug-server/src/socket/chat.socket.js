@@ -14,6 +14,25 @@ import { SOCKET_MEMORY_FALLBACK_ENABLED } from "../config/runtimeFlags.js";
 
 const HISTORY_PAGE_SIZE = 50;
 
+function toTime(value) {
+    if (value == null) return null;
+
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+
+    if (value instanceof Date) {
+        const timestamp = value.getTime();
+        return Number.isNaN(timestamp) ? null : timestamp;
+    }
+
+    if (typeof value === "string" && value.trim()) {
+        const parsed = Date.parse(value);
+        return Number.isNaN(parsed) ? null : parsed;
+    }
+
+    return null;
+}
+
+
 function normalizeCursor(value) {
     if (value == null) return null;
 
@@ -130,6 +149,31 @@ async function getChatMessagesPageDb(chatId, beforeCreatedAt = null, pageSize = 
     };
 }
 
+function getChatMessagesPageMemory(chatId, beforeCreatedAt = null, pageSize = HISTORY_PAGE_SIZE) {
+    const chat = chats[chatId];
+    if (!chat) return { messages: [], hasMoreHistory: false };
+
+    const cursor = toTime(beforeCreatedAt);
+    const sorted = [...(chat.messages ?? [])].sort(
+        (a, b) => (toTime(a?.createdAt) ?? 0) - (toTime(b?.createdAt) ?? 0)
+    );
+
+    const filtered = cursor == null
+        ? sorted
+        : sorted.filter((message) => {
+            const messageTime = toTime(message?.createdAt);
+            return messageTime != null && messageTime < cursor;
+        });
+
+    const start = Math.max(filtered.length - pageSize, 0);
+    const page = filtered.slice(start);
+
+    return {
+        messages: page,
+        hasMoreHistory: start > 0,
+    };
+}
+
 async function upsertPrivateChatDb(currentUserId, targetUserId) {
     const chatId = buildPrivateChatId(currentUserId, targetUserId);
 
@@ -216,7 +260,7 @@ async function getGroupChatPayloadDb(chatId, currentUserId) {
         members: groupChat.members.map((m) => m.userId),
         messages: history.messages,
         hasMoreHistory: history.hasMoreHistory,
-        canPublish: canPublishToGroup(groupChat.id, currentUserId),
+        canPublish,
     };
 }
 
@@ -417,6 +461,21 @@ export function chatSocket(io, socket) {
             });
         } catch (error) {
             console.error("chat:history db failed:", error?.message ?? error);
+
+            if (SOCKET_MEMORY_FALLBACK_ENABLED) {
+                const chat = chats[chatId];
+                if (!chat) return;
+                if (!chat.members.includes(socket.data.userId)) return;
+
+                const history = getChatMessagesPageMemory(chatId, beforeCreatedAt);
+                socket.emit("chat:history", {
+                    chatId,
+                    messages: history.messages,
+                    hasMoreHistory: history.hasMoreHistory,
+                });
+                return;
+            }
+
             socket.emit("chat:error", { message: "Chat history is temporarily unavailable" });
         }
     });

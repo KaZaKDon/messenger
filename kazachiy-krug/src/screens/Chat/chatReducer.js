@@ -20,6 +20,7 @@ function ensureChat(state, chatId) {
             otherUser: null,
             hasMoreHistory: false,
             historyLoading: false,
+            historyNotice: "",
             messages: [],
             draft: "",
             typingUsers: [],
@@ -100,6 +101,7 @@ export function chatReducer(state, action) {
                         otherUser: otherUser ?? chats[chatId].otherUser ?? null,
                         hasMoreHistory: hasMoreHistory ?? false,
                         historyLoading: false,
+                        historyNotice: "",
                         messages,
                         typingUsers: chats[chatId].typingUsers ?? [],
                     },
@@ -120,6 +122,7 @@ export function chatReducer(state, action) {
                     [chatId]: {
                         ...chat,
                         historyLoading: Boolean(loading),
+                        historyNotice: loading ? "" : chat.historyNotice,
                     },
                 },
             };
@@ -143,6 +146,26 @@ export function chatReducer(state, action) {
                         messages: [...uniqueMessages, ...(chat.messages ?? [])],
                         hasMoreHistory: Boolean(hasMoreHistory),
                         historyLoading: false,
+                        historyNotice: hasMoreHistory ? "" : "История чата загружена полностью",
+                    },
+                },
+            };
+        }
+
+        case "CHAT_HISTORY_NOTICE": {
+            const { chatId, message = "" } = action.payload || {};
+            if (!chatId) return state;
+
+            const chats = ensureChat(state, chatId);
+            const chat = chats[chatId];
+
+            return {
+                ...state,
+                chats: {
+                    ...chats,
+                    [chatId]: {
+                        ...chat,
+                        historyNotice: message,
                     },
                 },
             };

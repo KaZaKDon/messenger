@@ -120,7 +120,11 @@ export function useChatSocket(
             });
 
             if (message) {
-                alert(message);
+                dispatch({
+                    type: "CHAT_HISTORY_NOTICE",
+                    payload: { chatId: activeChatId ?? null, message },
+                });
+
             }
         };
 
@@ -183,7 +187,11 @@ export function useChatSocket(
             }
 
             if (reason) {
-                alert(reason);
+                dispatch({
+                    type: "CHAT_HISTORY_NOTICE",
+                    payload: { chatId: chatId ?? activeChatId ?? null, message: reason },
+                });
+
             }
         };
 

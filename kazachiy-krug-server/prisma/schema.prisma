@@ -97,7 +97,7 @@ model GroupRule {
   chatId                         String    @id
   mode                           GroupMode @default(chat)
   requiresAnnouncementWithImage  Boolean   @default(false)
-  publishUserIds                 Json?
+  publishUserIds                 Json?     @map("publish_user_ids")
 
   chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
 

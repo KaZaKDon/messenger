@@ -4,7 +4,12 @@
     "scripts": {
         "dev": "nodemon src/index.js",
         "start": "node src/index.js",
-        "seed:history": "node prisma/seed-history.js"
+        "prisma:generate": "prisma generate",
+        "migrate:deploy": "prisma migrate deploy",
+        "prisma:seed": "node prisma/seed.js",
+        "seed:history": "node prisma/seed-history.js",
+        "db:setup": "npm run migrate:deploy && npm run prisma:seed && npm run seed:history",
+        "test": "node --test src/socket/__tests__/*.test.js"
     },
     "version": "1.0.0",
     "description": "",

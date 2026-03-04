@@ -49,6 +49,7 @@ export default function ChatWindow({
 
     const hasMoreHistory = Boolean(chat?.hasMoreHistory);
     const historyLoading = Boolean(chat?.historyLoading);
+    const historyNotice = chat?.historyNotice ?? "";
 
     const emojiList = useMemo(
         () => [
@@ -319,6 +320,8 @@ export default function ChatWindow({
                     {announcementMode === "feed" ? (
                         <>
                             <div className="messages" onScroll={handleMessagesScroll}>
+                                {historyNotice ? <div className="history-notice">{historyNotice}</div> : null}
+
                                 {hasSelectedChat && hasMoreHistory ? (
                                     <button
                                         type="button"
@@ -329,6 +332,11 @@ export default function ChatWindow({
                                         {historyLoading ? "Загружаем..." : "Показать более ранние объявления"}
                                     </button>
                                 ) : null}
+
+                                {hasSelectedChat && !hasMoreHistory && chat?.messages?.length ? (
+                                    <div className="history-end">Более ранних объявлений нет</div>
+                                ) : null}
+
 
                                 {!hasSelectedChat ? (
                                     <div className="chat-empty-placeholder">
@@ -396,16 +404,7 @@ export default function ChatWindow({
                 ======================= */
                 <>
                     <div className="messages" onScroll={handleMessagesScroll}>
-                        {hasSelectedChat && hasMoreHistory ? (
-                            <button
-                                type="button"
-                                className="history-load-more"
-                                onClick={onLoadOlderMessages}
-                                disabled={historyLoading}
-                            >
-                                {historyLoading ? "Загружаем..." : "Показать более ранние сообщения"}
-                            </button>
-                        ) : null}
+                        {historyNotice ? <div className="history-notice">{historyNotice}</div> : null}
 
                         {hasSelectedChat && hasMoreHistory ? (
                             <button
@@ -417,6 +416,11 @@ export default function ChatWindow({
                                 {historyLoading ? "Загружаем..." : "Показать более ранние сообщения"}
                             </button>
                         ) : null}
+
+                        {hasSelectedChat && !hasMoreHistory && chat?.messages?.length ? (
+                            <div className="history-end">Более ранних сообщений нет</div>
+                        ) : null}
+
 
                         {!hasSelectedChat ? (
                             <div className="chat-empty-placeholder">

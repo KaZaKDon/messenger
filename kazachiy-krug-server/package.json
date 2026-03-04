@@ -9,7 +9,10 @@
         "prisma:seed": "node prisma/seed.js",
         "seed:history": "node prisma/seed-history.js",
         "db:setup": "npm run migrate:deploy && npm run prisma:seed && npm run seed:history",
-        "test": "node --test src/socket/__tests__/*.test.js"
+        "db:setup:full": "npm run prisma:generate && npm run db:setup",
+        "test": "node --test src/socket/__tests__/*.test.js",
+        "verify": "npm run test"
+
     },
     "version": "1.0.0",
     "description": "",

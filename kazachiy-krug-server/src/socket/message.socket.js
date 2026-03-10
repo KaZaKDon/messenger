@@ -85,9 +85,10 @@ async function getGroupRuleDb(chatId) {
 function canPublishToGroupByRule(rule, userId) {
     if (!rule) return true;
 
-    if (Array.isArray(rule.publishUserIds)) {
+    if (Array.isArray(rule.publishUserIds) && rule.publishUserIds.length > 0) {
         return rule.publishUserIds.includes(userId);
     }
+
 
     if (rule.mode === "chat") return true;
     if (rule.mode === "announcements") return true;
@@ -112,6 +113,39 @@ function validateGroupMessageByRule(rule, message) {
     }
 
     return { ok: true };
+}
+
+const ALLOWED_MESSAGE_TYPES = new Set(["text", "media", "service"]);
+const ALLOWED_MEDIA_TYPES = new Set(["image", "audio", "video", "file"]);
+
+function normalizeMessageType(rawType) {
+    if (typeof rawType !== "string") return "text";
+    const type = rawType.trim().toLowerCase();
+    return ALLOWED_MESSAGE_TYPES.has(type) ? type : "text";
+}
+
+function normalizeAttachments(rawAttachments) {
+    if (!Array.isArray(rawAttachments)) return [];
+
+    return rawAttachments
+        .filter((attachment) => attachment && typeof attachment === "object")
+        .map((attachment) => {
+            const mediaTypeRaw = typeof attachment.mediaType === "string"
+                ? attachment.mediaType.trim().toLowerCase()
+                : "file";
+
+            return {
+                mediaType: ALLOWED_MEDIA_TYPES.has(mediaTypeRaw) ? mediaTypeRaw : "file",
+                url: typeof attachment.url === "string" ? attachment.url.trim() : "",
+                mimeType: typeof attachment.mimeType === "string" ? attachment.mimeType : null,
+                sizeBytes: Number.isFinite(attachment.sizeBytes) ? Math.max(0, Math.trunc(attachment.sizeBytes)) : null,
+                durationMs: Number.isFinite(attachment.durationMs) ? Math.max(0, Math.trunc(attachment.durationMs)) : null,
+                waveform: attachment.waveform ?? null,
+                width: Number.isFinite(attachment.width) ? Math.max(0, Math.trunc(attachment.width)) : null,
+                height: Number.isFinite(attachment.height) ? Math.max(0, Math.trunc(attachment.height)) : null,
+            };
+        })
+        .filter((attachment) => attachment.url);
 }
 
 function runMessageSendMemory(io, socket, message) {
@@ -239,9 +273,16 @@ export function messageSocket(io, socket) {
                     chatId,
                     senderId: socket.data.userId,
                     text: typeof message?.text === "string" ? message.text : "",
+                    type: typeof message?.type === "string" ? message.type : "text",
                     imageUrl: typeof message?.imageUrl === "string" ? message.imageUrl : null,
                     imageUrls: Array.isArray(message?.imageUrls) ? message.imageUrls : null,
+                    attachments: {
+                        create: normalizeAttachments(message?.attachments),
+                    },
                     status: "sent",
+                    include: {
+                    attachments: true,
+                },
                 },
             });
 
@@ -252,8 +293,10 @@ export function messageSocket(io, socket) {
                 senderId: created.senderId,
                 senderName: socket.data.userName,
                 text: created.text,
+                type: created.type,
                 imageUrl: created.imageUrl,
                 imageUrls: created.imageUrls,
+                attachments: created.attachments,
                 status: created.status,
                 createdAt: created.createdAt.getTime(),
             };

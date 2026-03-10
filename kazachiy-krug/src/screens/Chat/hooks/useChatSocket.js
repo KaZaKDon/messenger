@@ -41,11 +41,6 @@ export function useChatSocket(
         if (!socket) return;
         if (!currentUser?.id || !activeChatUserId) return;
 
-        socket.emit("chat:open", {
-            from: currentUser.id,
-            to: activeChatUserId,
-        });
-
         // ✅ сервер теперь может прислать больше полей: type/title/membersInfo/otherUser
         const onChatOpened = (payload) => {
             const {
@@ -77,7 +72,15 @@ export function useChatSocket(
             });
         };
 
+         // Важно: подписываемся ДО emit, чтобы не словить race-condition
+        // (сервер может ответить chat:opened очень быстро).
         socket.on("chat:opened", onChatOpened);
+
+        socket.emit("chat:open", {
+            from: currentUser.id,
+            to: activeChatUserId,
+        });
+
 
         return () => {
             socket.off("chat:opened", onChatOpened);

@@ -65,8 +65,11 @@ export function chatReducer(state, action) {
                 };
             }
 
-            // личка: activeChatId придет из chat:opened
-            return { ...state, activeChatUserId: id };
+            // личка/сброс: activeChatId придет из chat:opened
+            // важно сбросить прошлый activeChatId (например, от группы),
+            // чтобы не протекала чужая структура в новый выбор.
+            return { ...state, activeChatUserId: id, activeChatId: null };
+
         }
 
         case "SET_ACTIVE_CHAT": {

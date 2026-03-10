@@ -72,7 +72,7 @@ async function canPublishToGroupDb(chatId, userId) {
 
     if (!rule) return true;
 
-    if (Array.isArray(rule.publishUserIds)) {
+    if (Array.isArray(rule.publishUserIds) && rule.publishUserIds.length > 0) {
         return rule.publishUserIds.includes(userId);
     }
 
@@ -109,8 +109,10 @@ function mapDbMessages(messages = []) {
         chatId: message.chatId,
         senderId: message.senderId,
         text: message.text,
+        type: message.type,
         imageUrl: message.imageUrl,
         imageUrls: message.imageUrls,
+        attachments: message.attachments ?? [],
         status: message.status,
         createdAt: message.createdAt instanceof Date ? message.createdAt.getTime() : message.createdAt,
     }));
@@ -133,8 +135,23 @@ async function getChatMessagesPageDb(chatId, beforeCreatedAt = null, pageSize = 
             chatId: true,
             senderId: true,
             text: true,
+            type: true,
             imageUrl: true,
             imageUrls: true,
+            attachments: {
+                select: {
+                    id: true,
+                    mediaType: true,
+                    url: true,
+                    mimeType: true,
+                    sizeBytes: true,
+                    durationMs: true,
+                    waveform: true,
+                    width: true,
+                    height: true,
+                },
+            },
+
             status: true,
             createdAt: true,
         },

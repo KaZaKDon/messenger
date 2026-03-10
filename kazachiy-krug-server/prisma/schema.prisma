@@ -1,105 +1,181 @@
-generator client {
-  provider = "prisma-client-js"
+diff --git a/kazachiy-krug-server/prisma/schema.prisma b/kazachiy-krug-server/prisma/schema.prisma
+index 4145c2a997cd4f7f87d35e2751efb3014d293ca6..065b0161653414794b3a5c16bcf2f5784008bb49 100644
+kazachiy-krug-server/prisma/schema.prisma
+@@ -2,104 +2,177 @@ generator client {
+   provider = "prisma-client-js"
+ }
+ 
+ datasource db {
+   provider = "postgresql"
+   url      = env("DATABASE_URL")
+ }
+ 
+ enum ChatType {
+   private
+   group
+ }
+ 
+ enum GroupMode {
+   readonly
+   announcements
+   chat
+ }
+ 
+ enum MessageStatus {
+   sent
+   delivered
+   read
+ }
+ 
+enum MessageType {
+  text
+  media
+  service
 }
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+enum MediaType {
+  image
+  audio
+  video
+  file
 }
 
-enum ChatType {
-  private
-  group
+enum CallType {
+  audio
+  video
 }
 
-enum GroupMode {
-  readonly
-  announcements
-  chat
+enum CallStatus {
+  initiated
+  ringing
+  connected
+  ended
+  failed
+  missed
 }
 
-enum MessageStatus {
-  sent
-  delivered
-  read
+ model User {
+   id        String       @id
+   name      String
+   phone     String       @unique
+   avatar    String?
+   createdAt DateTime     @default(now())
+ 
+   memberships ChatMember[]
+   messages    Message[]
+   settings    UserSettings?
+ 
+   @@map("users")
+ }
+ 
+ model Chat {
+   id        String      @id
+   type      ChatType
+   title     String?
+   createdAt DateTime    @default(now())
+ 
+   members   ChatMember[]
+   messages  Message[]
+   groupRule GroupRule?
+ 
+   @@map("chats")
+ }
+ 
+ model ChatMember {
+   chatId    String
+   userId    String
+   role      String      @default("member")
+   joinedAt  DateTime    @default(now())
+ 
+   chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+ 
+   @@id([chatId, userId])
+   @@index([userId])
+   @@map("chat_members")
+ }
+ 
+ model Message {
+   id        String        @id @default(cuid())
+   chatId    String
+   senderId  String
+   text      String
+  type      MessageType   @default(text)
+   imageUrl  String?
+   imageUrls Json?         // поддержка массива картинок
+   status    MessageStatus @default(sent)
+   createdAt DateTime      @default(now())
+ 
+   chat   Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+   sender User @relation(fields: [senderId], references: [id], onDelete: Restrict)
+  attachments MessageAttachment[]
+  calls       CallSession[]
+ 
+   @@index([chatId, createdAt])
+   @@index([senderId])
+   @@map("messages")
+ }
+ 
+model MessageAttachment {
+  id          String    @id @default(cuid())
+  messageId   String
+  mediaType   MediaType
+  url         String
+  mimeType    String?
+  sizeBytes   Int?
+  durationMs  Int?
+  waveform    Json?
+  width       Int?
+  height      Int?
+  createdAt   DateTime  @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([mediaType])
+  @@map("message_attachments")
 }
 
-model User {
-  id        String       @id
-  name      String
-  phone     String       @unique
-  avatar    String?
-  createdAt DateTime     @default(now())
+model CallSession {
+  id           String     @id @default(cuid())
+  chatId        String
+  initiatorId   String
+  type          CallType
+  status        CallStatus @default(initiated)
+  startedAt     DateTime?
+  endedAt       DateTime?
+  durationSec   Int?
+  endedReason   String?
+  messageId     String?    @unique
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
-  memberships ChatMember[]
-  messages    Message[]
-  settings    UserSettings?
-
-  @@map("users")
-}
-
-model Chat {
-  id        String      @id
-  type      ChatType
-  title     String?
-  createdAt DateTime    @default(now())
-
-  members   ChatMember[]
-  messages  Message[]
-  groupRule GroupRule?
-
-  @@map("chats")
-}
-
-model ChatMember {
-  chatId    String
-  userId    String
-  role      String      @default("member")
-  joinedAt  DateTime    @default(now())
-
-  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@id([chatId, userId])
-  @@index([userId])
-  @@map("chat_members")
-}
-
-model Message {
-  id        String        @id @default(cuid())
-  chatId    String
-  senderId  String
-  text      String
-  imageUrl  String?
-  imageUrls Json?         // поддержка массива картинок
-  status    MessageStatus @default(sent)
-  createdAt DateTime      @default(now())
-
-  chat   Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  sender User @relation(fields: [senderId], references: [id], onDelete: Restrict)
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  initiator User     @relation(fields: [initiatorId], references: [id], onDelete: Restrict)
+  message   Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
 
   @@index([chatId, createdAt])
-  @@index([senderId])
-  @@map("messages")
+  @@index([initiatorId, createdAt])
+  @@map("call_sessions")
 }
 
-model UserSettings {
-  userId               String   @id
-  theme                String   @default("light")
-  notificationsEnabled Boolean  @default(true)
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("user_settings")
-}
-
-model GroupRule {
-  chatId                         String    @id
-  mode                           GroupMode @default(chat)
-  requiresAnnouncementWithImage  Boolean   @default(false)
-  publishUserIds                 Json?     @map("publish_user_ids")
-
-  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
-
-  @@map("group_rules")
+ model UserSettings {
+   userId               String   @id
+   theme                String   @default("light")
+   notificationsEnabled Boolean  @default(true)
+ 
+   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+ 
+   @@map("user_settings")
+ }
+ 
+ model GroupRule {
+   chatId                         String    @id
+   mode                           GroupMode @default(chat)
+   requiresAnnouncementWithImage  Boolean   @default(false)
+   publishUserIds                 Json?     @map("publish_user_ids")
+ 
+   chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+ 
+   @@map("group_rules")
 }

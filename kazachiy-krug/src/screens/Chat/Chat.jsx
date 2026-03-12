@@ -8,6 +8,10 @@ import { getSocket } from "../../shared/socket";
 import "./chat.css";
 import "../../styles/variables.css";
 
+function getPrivateChatId(userA, userB) {
+    return `room-${[userA, userB].sort().join("-")}`;
+}
+
 export default function Chat({ currentUser }) {
     const [state, dispatch] = useReducer(chatReducer, {
         ...initialState,
@@ -17,7 +21,29 @@ export default function Chat({ currentUser }) {
 
     const { users, chats, activeChatUserId, activeChatId } = state;
 
-    const activeChat = activeChatId ? chats[activeChatId] : null;
+    const resolvedChatId = useMemo(() => {
+        if (activeChatId) return activeChatId;
+
+        if (!activeChatUserId || activeChatUserId.startsWith("group-")) {
+            return null;
+        }
+
+        return getPrivateChatId(currentUser.id, activeChatUserId);
+    }, [activeChatId, activeChatUserId, currentUser.id]);
+
+    const activeChat = useMemo(() => {
+        if (!resolvedChatId) return null;
+
+        return (
+            chats[resolvedChatId] ?? {
+                id: resolvedChatId,
+                type: "private",
+                messages: [],
+                draft: "",
+                canPublish: true,
+            }
+        );
+    }, [chats, resolvedChatId]);
 
     // 🔹 сокет (всегда)
     useChatSocket(
@@ -45,8 +71,8 @@ export default function Chat({ currentUser }) {
         return null;
     }, [activeChat?.otherUser, activeChat?.type, activeChatUserId, users]);
 
-    const sendMessage = ({ text, imageUrl, imageUrls }) => {
-        if (!activeChatId) return;
+    const sendMessage = ({ text, imageUrl, imageUrls, type, attachments }) => {
+        if (!resolvedChatId) return;
 
         const socket = getSocket();
         if (!socket) return;
@@ -56,16 +82,22 @@ export default function Chat({ currentUser }) {
             typeof imageUrl === "string"
                 ? imageUrl.trim().length > 0
                 : Array.isArray(imageUrls) && imageUrls.filter(Boolean).length > 0;
+        const normalizedAttachments = Array.isArray(attachments)
+            ? attachments.filter((item) => item && typeof item.url === "string" && item.url.trim())
+            : [];
+        const hasAttachments = normalizedAttachments.length > 0;
 
         // защита от совсем пустого
-        if (!cleanText.trim() && !hasAnyImage) return;
+        if (!cleanText.trim() && !hasAnyImage && !hasAttachments) return;
 
         const message = {
             id: crypto.randomUUID(),
-            chatId: activeChatId,
+            chatId: resolvedChatId,
             text: cleanText,
             imageUrl: imageUrl ?? null,
             imageUrls: Array.isArray(imageUrls) ? imageUrls : undefined,
+            type: type ?? (hasAttachments ? "media" : "text"),
+            attachments: hasAttachments ? normalizedAttachments : undefined,
             senderId: currentUser.id,
             fromMe: true,
             status: "sent",
@@ -75,7 +107,7 @@ export default function Chat({ currentUser }) {
 
         dispatch({
             type: "RECEIVE_MESSAGE",
-            payload: { chatId: activeChatId, message },
+            payload: { chatId: resolvedChatId, message },
         });
     };
 
@@ -158,11 +190,11 @@ export default function Chat({ currentUser }) {
                     onWriteToAuthor={openPrivateChat}
                     onDraftChange={(text) => {
                         // ✅ не пишем draft в "никуда"
-                        if (!activeChatId) return;
+                        if (!resolvedChatId) return;
 
                         dispatch({
                             type: "SET_DRAFT",
-                            payload: { chatId: activeChatId, text },
+                            payload: { chatId: resolvedChatId, text },
                         });
                     }}
                     onTypingStart={startTyping}

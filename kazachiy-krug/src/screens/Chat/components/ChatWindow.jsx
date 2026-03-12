@@ -10,6 +10,28 @@ import AnnouncementCard from "./AnnouncementCard";
 
 const API_BASE = "http://localhost:3000";
 
+const VOICE_MIME_CANDIDATES = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/ogg;codecs=opus",
+    "audio/ogg",
+];
+
+function getSupportedVoiceMimeType() {
+    if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
+        return "";
+    }
+
+    return VOICE_MIME_CANDIDATES.find((candidate) => MediaRecorder.isTypeSupported(candidate)) ?? "";
+}
+
+function formatVoiceDuration(totalMs) {
+    const totalSeconds = Math.max(0, Math.floor(totalMs / 1000));
+    const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+    const seconds = String(totalSeconds % 60).padStart(2, "0");
+    return `${minutes}:${seconds}`;
+}
+
 export default function ChatWindow({
     chat,
     activeUser,
@@ -76,6 +98,35 @@ export default function ChatWindow({
     const [selectedImagePreview, setSelectedImagePreview] = useState(null);
     const [uploading, setUploading] = useState(false);
 
+    const mediaRecorderRef = useRef(null);
+    const mediaStreamRef = useRef(null);
+    const voiceChunksRef = useRef([]);
+    const voiceStartedAtRef = useRef(0);
+    const voiceTimerRef = useRef(null);
+
+    const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+    const [voiceDurationMs, setVoiceDurationMs] = useState(0);
+    const [recordedVoiceBlob, setRecordedVoiceBlob] = useState(null);
+
+    const stopVoiceTimer = useCallback(() => {
+        if (voiceTimerRef.current) {
+            clearInterval(voiceTimerRef.current);
+            voiceTimerRef.current = null;
+        }
+    }, []);
+
+    const stopVoiceTracks = useCallback(() => {
+        if (mediaStreamRef.current) {
+            mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+            mediaStreamRef.current = null;
+        }
+    }, []);
+
+    const clearRecordedVoice = useCallback(() => {
+        setRecordedVoiceBlob(null);
+        setVoiceDurationMs(0);
+    }, []);
+
     const clearSelectedImage = useCallback(() => {
         setSelectedImageFile(null);
         setSelectedImagePreview((prev) => {
@@ -109,7 +160,7 @@ export default function ChatWindow({
         if (!selectedImageFile) return null;
 
         const fd = new FormData();
-        fd.append("image", selectedImageFile);
+        fd.append("file", selectedImageFile);
 
         setUploading(true);
         try {
@@ -124,11 +175,123 @@ export default function ChatWindow({
             }
 
             const data = await res.json();
-            return data?.imageUrl ?? null;
+            return data?.imageUrl ?? data?.fileUrl ?? null;
         } finally {
             setUploading(false);
         }
     }
+
+    async function uploadRecordedVoice(blob) {
+        if (!blob) return null;
+
+        const fd = new FormData();
+        const ext = blob.type.includes("ogg") ? "ogg" : "webm";
+        fd.append("file", blob, `voice-note.${ext}`);
+
+        setUploading(true);
+        try {
+            const res = await fetch(`${API_BASE}/upload`, {
+                method: "POST",
+                body: fd,
+            });
+
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text || "Upload failed");
+            }
+
+            const data = await res.json();
+            return data?.audioUrl ?? data?.fileUrl ?? null;
+        } finally {
+            setUploading(false);
+        }
+    }
+
+    const startVoiceRecording = useCallback(async () => {
+        if (isRecordingVoice || uploading) return;
+
+        if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+            alert("Запись голоса не поддерживается в этом браузере.");
+            return;
+        }
+
+        try {
+            clearSelectedImage();
+            clearRecordedVoice();
+            voiceChunksRef.current = [];
+            setVoiceDurationMs(0);
+
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaStreamRef.current = stream;
+
+            const mimeType = getSupportedVoiceMimeType();
+            const recorder = mimeType
+                ? new MediaRecorder(stream, { mimeType })
+                : new MediaRecorder(stream);
+
+            mediaRecorderRef.current = recorder;
+            recorder.ondataavailable = (event) => {
+                if (event.data?.size > 0) {
+                    voiceChunksRef.current.push(event.data);
+                }
+            };
+
+            recorder.onstop = () => {
+                stopVoiceTimer();
+                stopVoiceTracks();
+
+                const fallbackMime = mimeType || "audio/webm";
+                const blob = new Blob(voiceChunksRef.current, { type: fallbackMime });
+                if (blob.size > 0) {
+                    setRecordedVoiceBlob(blob);
+                }
+
+                mediaRecorderRef.current = null;
+                voiceChunksRef.current = [];
+                setIsRecordingVoice(false);
+            };
+
+            recorder.start();
+            setIsRecordingVoice(true);
+            voiceStartedAtRef.current = Date.now();
+            stopVoiceTimer();
+            voiceTimerRef.current = setInterval(() => {
+                setVoiceDurationMs(Date.now() - voiceStartedAtRef.current);
+            }, 250);
+        } catch (error) {
+            console.error(error);
+            stopVoiceTimer();
+            stopVoiceTracks();
+            setIsRecordingVoice(false);
+            alert("Не удалось включить микрофон. Проверьте доступ к микрофону.");
+        }
+    }, [clearRecordedVoice, clearSelectedImage, isRecordingVoice, stopVoiceTimer, stopVoiceTracks, uploading]);
+
+    const stopVoiceRecording = useCallback(() => {
+        if (!isRecordingVoice) return;
+
+        const recorder = mediaRecorderRef.current;
+        if (recorder && recorder.state !== "inactive") {
+            recorder.stop();
+            return;
+        }
+
+        stopVoiceTimer();
+        stopVoiceTracks();
+        setIsRecordingVoice(false);
+    }, [isRecordingVoice, stopVoiceTimer, stopVoiceTracks]);
+
+    const cancelVoiceRecording = useCallback(() => {
+        if (isRecordingVoice) {
+            mediaRecorderRef.current?.stop();
+        }
+
+        stopVoiceTimer();
+        stopVoiceTracks();
+        setIsRecordingVoice(false);
+        clearRecordedVoice();
+        voiceChunksRef.current = [];
+    }, [clearRecordedVoice, isRecordingVoice, stopVoiceTimer, stopVoiceTracks]);
 
     const handleMessagesScroll = useCallback(
         (event) => {
@@ -193,7 +356,13 @@ export default function ChatWindow({
     useEffect(() => {
         stopTypingNow();
         setEmojiOpen(false);
-    }, [chat?.id, stopTypingNow]);
+        cancelVoiceRecording();
+    }, [cancelVoiceRecording, chat?.id, stopTypingNow]);
+
+    useEffect(() => () => {
+        stopVoiceTimer();
+        stopVoiceTracks();
+    }, [stopVoiceTimer, stopVoiceTracks]);
 
     const handleChange = (event) => {
         const value = event.target.value;
@@ -216,15 +385,18 @@ export default function ChatWindow({
     };
 
     const handleSend = async () => {
-        if (!chat) return;
+        if (!chat || isRecordingVoice) return;
 
         const text = (chat.draft ?? "").trim();
-        if (!text && !selectedImageFile) return;
+        const hasVoice = Boolean(recordedVoiceBlob);
+        if (!text && !selectedImageFile && !hasVoice) return;
 
         let imageUrl = null;
+        let audioUrl = null;
 
         try {
-            if (selectedImageFile) {
+            // UX-ограничение: voice отправляем отдельным действием (без смешивания с картинкой)
+            if (!hasVoice && selectedImageFile) {
                 imageUrl = await uploadSelectedImage();
                 if (!imageUrl) {
                     alert("Не удалось загрузить картинку.");
@@ -232,17 +404,42 @@ export default function ChatWindow({
                 }
             }
 
-            if (imageUrl?.startsWith("blob:")) {
-                alert("Картинка не загрузилась на сервер. Повтори отправку.");
+            if (hasVoice) {
+                audioUrl = await uploadRecordedVoice(recordedVoiceBlob);
+                if (!audioUrl) {
+                    alert("Не удалось загрузить голосовое сообщение.");
+                    return;
+                }
+            }
+
+            if (imageUrl?.startsWith("blob:") || audioUrl?.startsWith("blob:")) {
+                alert("Файл не загрузился на сервер. Повтори отправку.");
                 return;
             }
 
-            onSend({ text, imageUrl });
+            if (audioUrl) {
+                onSend({
+                    text: "",
+                    type: "media",
+                    attachments: [
+                        {
+                            mediaType: "audio",
+                            url: audioUrl,
+                            mimeType: recordedVoiceBlob.type || "audio/webm",
+                            sizeBytes: recordedVoiceBlob.size,
+                            durationMs: voiceDurationMs,
+                        },
+                    ],
+                });
+            } else {
+                onSend({ text, imageUrl });
+            }
 
             onDraftChange?.("");
             stopTypingNow();
             setEmojiOpen(false);
             clearSelectedImage();
+            clearRecordedVoice();
         } catch (err) {
             console.error(err);
             alert("Ошибка при отправке. Проверь сервер /upload.");
@@ -250,6 +447,8 @@ export default function ChatWindow({
     };
 
     const handleKeyDown = (event) => {
+        if (isRecordingVoice) return;
+
         if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
             handleSend();
@@ -257,6 +456,7 @@ export default function ChatWindow({
     };
 
     const chatType = chat?.type ?? "private";
+    const canUseComposer = !isRecordingVoice;
 
     // ✅ круги-объявления: по id
     const isAnnouncementGroup =
@@ -449,6 +649,20 @@ export default function ChatWindow({
                                             ) : null;
                                         })()}
 
+                                        {Array.isArray(m.attachments)
+                                            ? m.attachments
+                                                .filter((attachment) => attachment?.mediaType === "audio" && attachment?.url)
+                                                .map((attachment) => (
+                                                    <audio
+                                                        key={attachment.id ?? attachment.url}
+                                                        className="message-audio"
+                                                        controls
+                                                        preload="metadata"
+                                                        src={attachment.url}
+                                                    />
+                                                ))
+                                            : null}
+
                                         {m.text ? <div className="message-text">{m.text}</div> : null}
                                     </div>
 
@@ -480,13 +694,30 @@ export default function ChatWindow({
                         </div>
                     ) : null}
 
+                    {isRecordingVoice || recordedVoiceBlob ? (
+                        <div className="voice-recorder-bar">
+                            <span className="voice-recorder-state">
+                                {isRecordingVoice ? "● Запись" : "Голосовое готово"}
+                            </span>
+                            <span className="voice-recorder-time">{formatVoiceDuration(voiceDurationMs)}</span>
+                            <button
+                                type="button"
+                                className="voice-cancel-btn"
+                                onClick={cancelVoiceRecording}
+                                disabled={uploading}
+                            >
+                                Отмена
+                            </button>
+                        </div>
+                    ) : null}
+
                     <footer className="chat-input">
                         <div className="chat-input-left">
                             <button
                                 type="button"
                                 className="attach-btn"
                                 aria-label="attach"
-                                disabled={!chat || !hasSelectedChat || uploading || !canPublish}
+                                disabled={!chat || !hasSelectedChat || uploading || !canPublish || !canUseComposer}
                                 onClick={() => fileInputRef.current?.click()}
                                 title="Прикрепить картинку"
                             >
@@ -503,9 +734,20 @@ export default function ChatWindow({
 
                             <button
                                 type="button"
+                                className="mic-btn"
+                                aria-label={isRecordingVoice ? "stop recording" : "start recording"}
+                                disabled={!chat || !hasSelectedChat || uploading || !canPublish}
+                                onClick={isRecordingVoice ? stopVoiceRecording : startVoiceRecording}
+                                title={isRecordingVoice ? "Остановить запись" : "Записать голос"}
+                            >
+                                {isRecordingVoice ? "⏹" : "🎙"}
+                            </button>
+
+                            <button
+                                type="button"
                                 className="emoji-btn"
                                 aria-label="emoji"
-                                disabled={!chat || !hasSelectedChat || uploading || !canPublish}
+                                disabled={!chat || !hasSelectedChat || uploading || !canPublish || !canUseComposer}
                                 onClick={() => setEmojiOpen((v) => !v)}
                                 title="Смайлики"
                             >
@@ -530,16 +772,16 @@ export default function ChatWindow({
 
                         <textarea
                             value={chat?.draft ?? ""}
-                            disabled={!chat || !hasSelectedChat || uploading || !canPublish}
+                            disabled={!chat || !hasSelectedChat || uploading || !canPublish || !canUseComposer}
                             onChange={handleChange}
                             onBlur={stopTypingNow}
                             onKeyDown={handleKeyDown}
-                            placeholder={canPublish ? (uploading ? "Загрузка..." : "Сообщение...") : "Публикация в этой группе запрещена"}
+                            placeholder={canPublish ? (isRecordingVoice ? "Идёт запись голосового..." : (uploading ? "Загрузка..." : "Сообщение...")) : "Публикация в этой группе запрещена"}
                             rows={1}
                         />
 
                         <button
-                            disabled={!chat || !hasSelectedChat || uploading || !canPublish}
+                            disabled={!chat || !hasSelectedChat || uploading || !canPublish || !canUseComposer}
                             onClick={handleSend}
                             title="Отправить"
                         >

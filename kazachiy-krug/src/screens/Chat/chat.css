@@ -160,7 +160,8 @@
 
 /* Кнопка открытия панели */
 .emoji-btn,
-.attach-btn {
+.attach-btn,
+.mic-btn {
     width: 40px;
     height: 40px;
     border-radius: 12px;
@@ -174,7 +175,8 @@
 }
 
 .emoji-btn:disabled,
-.attach-btn:disabled {
+.attach-btn:disabled,
+.mic-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }
@@ -221,6 +223,41 @@
 
 .emoji-item:active {
     transform: scale(0.96);
+}
+
+.voice-recorder-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-top: 1px solid var(--border-light);
+    background: color-mix(in srgb, var(--chat-panel-bg) 85%, var(--bg-card));
+}
+
+.voice-recorder-state {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.voice-recorder-time {
+    font-size: 13px;
+    color: var(--color-muted);
+}
+
+.voice-cancel-btn {
+    margin-left: auto;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    background: var(--bg-card);
+    color: var(--color-primary);
+    padding: 4px 10px;
+    cursor: pointer;
+}
+
+.message-audio {
+    width: 240px;
+    max-width: 100%;
+    margin: 6px 0;
 }
 
 .chat-input textarea {
@@ -962,7 +999,8 @@
 
     .chat-input button,
     .emoji-btn,
-    .attach-btn {
+    .attach-btn,
+    .mic-btn {
         min-height: 44px;
         width: 44px;
         height: 44px;

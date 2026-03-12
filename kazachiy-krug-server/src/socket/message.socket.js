@@ -273,16 +273,16 @@ export function messageSocket(io, socket) {
                     chatId,
                     senderId: socket.data.userId,
                     text: typeof message?.text === "string" ? message.text : "",
-                    type: typeof message?.type === "string" ? message.type : "text",
+                    type: normalizeMessageType(message?.type),
                     imageUrl: typeof message?.imageUrl === "string" ? message.imageUrl : null,
                     imageUrls: Array.isArray(message?.imageUrls) ? message.imageUrls : null,
                     attachments: {
                         create: normalizeAttachments(message?.attachments),
                     },
                     status: "sent",
-                    include: {
-                    attachments: true,
                 },
+                include: {
+                    attachments: true,
                 },
             });
 

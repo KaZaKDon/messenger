@@ -8,37 +8,58 @@ const router = Router();
 const UPLOAD_DIR = path.resolve(process.cwd(), "uploads");
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
+const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif"];
+const AUDIO_EXTENSIONS = [".ogg", ".oga", ".mp3", ".wav", ".m4a", ".webm"];
+
+function isImageMime(mimetype = "") {
+    return mimetype.startsWith("image/");
+}
+
+function isAudioMime(mimetype = "") {
+    return mimetype.startsWith("audio/");
+}
+
 const storage = multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
     filename: (_req, file, cb) => {
-        const ext = path.extname(file.originalname || "").toLowerCase() || ".png";
-        const safeExt = [".jpg", ".jpeg", ".png", ".webp", ".gif"].includes(ext) ? ext : ".png";
+        const ext = path.extname(file.originalname || "").toLowerCase();
+
+        let safeExt = ".bin";
+        if (isImageMime(file.mimetype)) {
+            safeExt = IMAGE_EXTENSIONS.includes(ext) ? ext : ".png";
+        } else if (isAudioMime(file.mimetype)) {
+            safeExt = AUDIO_EXTENSIONS.includes(ext) ? ext : ".ogg";
+        }
+
         cb(null, `${Date.now()}-${Math.random().toString(16).slice(2)}${safeExt}`);
     },
 });
 
 const upload = multer({
     storage,
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+    limits: { fileSize: 15 * 1024 * 1024 }, // 15MB (image + audio)
     fileFilter: (_req, file, cb) => {
-        if (!file.mimetype?.startsWith("image/")) {
-            return cb(new Error("Only image files are allowed"));
+        if (!isImageMime(file.mimetype) && !isAudioMime(file.mimetype)) {
+            return cb(new Error("Only image and audio files are allowed"));
         }
         cb(null, true);
     },
 });
 
-router.post("/upload", upload.single("image"), (req, res) => {
-    const file = req.file;
+router.post("/upload", upload.any(), (req, res) => {
+    const file = Array.isArray(req.files) ? req.files[0] : null;
     if (!file) return res.status(400).json({ message: "No file uploaded" });
 
-    // отдаём URL, который фронт сможет открыть
     const baseUrl = `${req.protocol}://${req.get("host")}`;
-    const imageUrl = `${baseUrl}/uploads/${file.filename}`;
+    const fileUrl = `${baseUrl}/uploads/${file.filename}`;
+    const mediaType = isAudioMime(file.mimetype) ? "audio" : "image";
 
     res.json({
         ok: true,
-        imageUrl,
+        fileUrl,
+        imageUrl: mediaType === "image" ? fileUrl : null,
+        audioUrl: mediaType === "audio" ? fileUrl : null,
+        mediaType,
         filename: file.filename,
         size: file.size,
         mimetype: file.mimetype,

@@ -104,11 +104,18 @@ function validateGroupMessageByRule(rule, message) {
     const hasText = typeof message?.text === "string" && message.text.trim().length > 0;
     const hasSingle = typeof message?.imageUrl === "string" && message.imageUrl.trim().length > 0;
     const hasMany = Array.isArray(message?.imageUrls) && message.imageUrls.filter(Boolean).length > 0;
+    const hasImageAttachment = Array.isArray(message?.attachments)
+        && message.attachments.some((attachment) => {
+            const mediaType = typeof attachment?.mediaType === "string"
+                ? attachment.mediaType.trim().toLowerCase()
+                : "";
+            return mediaType === "image" && typeof attachment?.url === "string" && attachment.url.trim().length > 0;
+        });
 
-    if (!hasText || (!hasSingle && !hasMany)) {
+    if (!hasText || (!hasSingle && !hasMany && !hasImageAttachment)) {
         return {
             ok: false,
-            reason: "Для групп 4–10 требуется формат: объявление + картинка (text + imageUrl).",
+            reason: "Для групп 4–10 требуется формат: объявление + картинка (text + image attachment).",
         };
     }
 
@@ -148,6 +155,19 @@ function normalizeAttachments(rawAttachments) {
         .filter((attachment) => attachment.url);
 }
 
+function normalizeMessagePayload(message) {
+    const attachments = normalizeAttachments(message?.attachments);
+    const hasAudioAttachment = attachments.some((attachment) => attachment.mediaType === "audio");
+
+    return {
+        text: hasAudioAttachment ? "" : (typeof message?.text === "string" ? message.text : ""),
+        type: hasAudioAttachment ? "media" : normalizeMessageType(message?.type),
+        imageUrl: typeof message?.imageUrl === "string" ? message.imageUrl : null,
+        imageUrls: Array.isArray(message?.imageUrls) ? message.imageUrls : null,
+        attachments,
+    };
+}
+
 function runMessageSendMemory(io, socket, message) {
     const chatId = message?.chatId;
     if (!chatId) return;
@@ -179,8 +199,14 @@ function runMessageSendMemory(io, socket, message) {
         // memory fallback: не применяем store-based group policy
     }
 
+    const normalizedMessage = normalizeMessagePayload(message);
     const serverMessage = {
         ...message,
+        text: normalizedMessage.text,
+        type: normalizedMessage.type,
+        imageUrl: normalizedMessage.imageUrl,
+        imageUrls: normalizedMessage.imageUrls,
+        attachments: normalizedMessage.attachments,
         senderId: socket.data.userId,
         senderName: socket.data.userName,
         status: "sent",
@@ -265,6 +291,7 @@ export function messageSocket(io, socket) {
                     return;
                 }
             }
+            const normalizedMessage = normalizeMessagePayload(message);
             const created = await prisma.message.create({
                 data: {
                     ...(typeof message?.id === "string" && message.id ? {
@@ -272,12 +299,12 @@ export function messageSocket(io, socket) {
                     } : {}),
                     chatId,
                     senderId: socket.data.userId,
-                    text: typeof message?.text === "string" ? message.text : "",
-                    type: normalizeMessageType(message?.type),
-                    imageUrl: typeof message?.imageUrl === "string" ? message.imageUrl : null,
-                    imageUrls: Array.isArray(message?.imageUrls) ? message.imageUrls : null,
+                    text: normalizedMessage.text,
+                    type: normalizedMessage.type,
+                    imageUrl: normalizedMessage.imageUrl,
+                    imageUrls: normalizedMessage.imageUrls,
                     attachments: {
-                        create: normalizeAttachments(message?.attachments),
+                        create: normalizedMessage.attachments,
                     },
                     status: "sent",
                 },

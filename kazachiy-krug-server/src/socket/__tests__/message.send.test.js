@@ -109,9 +109,66 @@ test("message:send rejects announcements without image when required", async () 
         assert.ok(errorEvent, "message:error should be emitted");
         assert.equal(
             errorEvent.payload.reason,
-            "Для групп 4–10 требуется формат: объявление + картинка (text + imageUrl)."
+            "Для групп 4–10 требуется формат: объявление + картинка (text + image attachment)."
         );
         assert.equal(createCalled, false, "prisma.message.create must not be called");
+    } finally {
+        prisma.chat.findFirst = originalChatFindFirst;
+        prisma.groupRule.findUnique = originalGroupRuleFindUnique;
+        prisma.message.create = originalMessageCreate;
+    }
+});
+
+test("message:send allows announcement with image attachment and text", async () => {
+    const socket = createFakeSocket("user-1");
+    messageSocket(createFakeIo(), socket);
+
+    const originalChatFindFirst = prisma.chat.findFirst;
+    const originalGroupRuleFindUnique = prisma.groupRule.findUnique;
+    const originalMessageCreate = prisma.message.create;
+
+    let createCalled = false;
+
+    prisma.chat.findFirst = async () => ({
+        id: "group-4",
+        type: "group",
+        members: [{ userId: "user-1" }, { userId: "user-2" }],
+    });
+    prisma.groupRule.findUnique = async () => ({
+        mode: "announcements",
+        requiresAnnouncementWithImage: true,
+        publishUserIds: null,
+    });
+    prisma.message.create = async () => {
+        createCalled = true;
+        return {
+            id: "m-2a",
+            chatId: "group-4",
+            senderId: "user-1",
+            text: "announcement with attachment",
+            type: "media",
+            imageUrl: null,
+            imageUrls: null,
+            attachments: [{ id: "a-2a", mediaType: "image", url: "/uploads/pic.png" }],
+            status: "sent",
+            createdAt: new Date(),
+        };
+    };
+
+    try {
+        const handler = socket.handlers.get("message:send");
+        assert.ok(handler, "message:send handler should be registered");
+
+        await handler({
+            id: "m-2a",
+            chatId: "group-4",
+            text: "announcement with attachment",
+            attachments: [{ mediaType: "image", url: "/uploads/pic.png" }],
+        });
+
+        assert.equal(createCalled, true, "prisma.message.create must be called for valid attachment-based announcement");
+        const errorEvent = socket.emitted.find((item) => item.event === "message:error");
+        assert.equal(errorEvent, undefined, "message:error should not be emitted");
     } finally {
         prisma.chat.findFirst = originalChatFindFirst;
         prisma.groupRule.findUnique = originalGroupRuleFindUnique;
@@ -189,14 +246,14 @@ test("message:send normalizes invalid message type and attachment media type", a
         });
 
         assert.ok(createPayload, "prisma.message.create should be called");
-        assert.equal(createPayload.data.type, "text");
+        assert.equal(createPayload.data.type, "media");
         assert.equal(createPayload.data.attachments.create.length, 1);
         assert.equal(createPayload.data.attachments.create[0].mediaType, "file");
         assert.equal(createPayload.data.attachments.create[0].url, "/uploads/v1.ogg");
 
         const newEvent = socket.emitted.find((item) => item.event === "message:new");
         assert.ok(newEvent, "message:new should be emitted");
-        assert.equal(newEvent.payload.type, "text");
+        assert.equal(newEvent.payload.type, "media");
         assert.equal(newEvent.payload.attachments[0].mediaType, "file");
     } finally {
         prisma.chat.findFirst = originalChatFindFirst;
@@ -273,6 +330,81 @@ test("message:send keeps allowed media message type and audio attachment", async
         assert.ok(newEvent, "message:new should be emitted");
         assert.equal(newEvent.payload.type, "media");
         assert.equal(newEvent.payload.attachments[0].mediaType, "audio");
+    } finally {
+        prisma.chat.findFirst = originalChatFindFirst;
+        prisma.groupRule.findUnique = originalGroupRuleFindUnique;
+        prisma.message.create = originalMessageCreate;
+    }
+});
+
+test("message:send canonicalizes voice payload to media with empty text", async () => {
+    const socket = createFakeSocket("user-1");
+    messageSocket(createFakeIo(), socket);
+
+    const originalChatFindFirst = prisma.chat.findFirst;
+    const originalGroupRuleFindUnique = prisma.groupRule.findUnique;
+    const originalMessageCreate = prisma.message.create;
+
+    let createPayload = null;
+
+    prisma.chat.findFirst = async () => ({
+        id: "group-1",
+        type: "group",
+        members: [{ userId: "user-1" }, { userId: "user-2" }],
+    });
+    prisma.groupRule.findUnique = async () => ({
+        mode: "chat",
+        requiresAnnouncementWithImage: false,
+        publishUserIds: null,
+    });
+    prisma.message.create = async (payload) => {
+        createPayload = payload;
+
+        return {
+            id: "m-voice",
+            chatId: "group-1",
+            senderId: "user-1",
+            text: payload.data.text,
+            type: payload.data.type,
+            imageUrl: null,
+            imageUrls: null,
+            attachments: payload.data.attachments.create.map((attachment, idx) => ({
+                id: `a-voice-${idx + 1}`,
+                ...attachment,
+            })),
+            status: "sent",
+            createdAt: new Date(),
+        };
+    };
+
+    try {
+        const handler = socket.handlers.get("message:send");
+        assert.ok(handler, "message:send handler should be registered");
+
+        await handler({
+            id: "m-voice",
+            chatId: "group-1",
+            text: "voice note",
+            type: "text",
+            attachments: [
+                {
+                    mediaType: "audio",
+                    url: "/uploads/voice.ogg",
+                    mimeType: "audio/ogg",
+                    durationMs: 3200,
+                },
+            ],
+        });
+
+        assert.ok(createPayload, "prisma.message.create should be called");
+        assert.equal(createPayload.data.type, "media");
+        assert.equal(createPayload.data.text, "");
+        assert.equal(createPayload.data.attachments.create[0].mediaType, "audio");
+
+        const newEvent = socket.emitted.find((item) => item.event === "message:new");
+        assert.ok(newEvent, "message:new should be emitted");
+        assert.equal(newEvent.payload.type, "media");
+        assert.equal(newEvent.payload.text, "");
     } finally {
         prisma.chat.findFirst = originalChatFindFirst;
         prisma.groupRule.findUnique = originalGroupRuleFindUnique;

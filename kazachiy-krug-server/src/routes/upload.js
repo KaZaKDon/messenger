@@ -19,7 +19,7 @@ function isAudioMime(mimetype = "") {
     return mimetype.startsWith("audio/");
 }
 
-function resolveUploadFile(files = {}) {
+function pickUploadedFile(files = {}) {
     const fromFile = Array.isArray(files.file) ? files.file[0] : null;
     const fromLegacyImage = Array.isArray(files.image) ? files.image[0] : null;
 
@@ -28,6 +28,27 @@ function resolveUploadFile(files = {}) {
     }
 
     return { file: fromFile ?? fromLegacyImage ?? null };
+}
+
+
+function toUploadErrorResponse(err) {
+    if (!err) return null;
+
+    if (err instanceof multer.MulterError) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+            return { status: 400, message: "File is too large" };
+        }
+        if (err.code === "LIMIT_UNEXPECTED_FILE") {
+            return { status: 400, message: `Unexpected file field: ${err.field ?? "unknown"}` };
+        }
+        return { status: 400, message: err.message };
+    }
+
+    if (err instanceof Error) {
+        return { status: 400, message: err.message || "Upload failed" };
+    }
+
+    return { status: 500, message: "Upload failed" };
 }
 
 const storage = multer.diskStorage({
@@ -61,15 +82,11 @@ router.post(
     "/upload",
     upload.fields([
         { name: "file", maxCount: 1 },
-        { name: "image", maxCount: 1 }, // legacy frontend compatibility
+        { name: "image", maxCount: 1 },
     ]),
     (req, res) => {
-        const { file, error } = resolveUploadFile(req.files || {});
-
-        if (error) {
-            return res.status(400).json({ message: error });
-        }
-
+        const file = pickUploadedFile(req);
+        if (error) return res.status(400).json({ message: error });
         if (!file) return res.status(400).json({ message: "No file uploaded" });
 
         const baseUrl = `${req.protocol}://${req.get("host")}`;
@@ -88,5 +105,15 @@ router.post(
         });
     }
 );
+
+router.use((err, _req, res, next) => {
+    if (!err) return next();
+
+    const normalized = toUploadErrorResponse(err);
+    if (!normalized) return next();
+
+    return res.status(normalized.status).json({ message: normalized.message });
+});
+
 
 export default router;

@@ -390,15 +390,12 @@ export default function ChatWindow({
         if (!chat || isRecordingVoice || recordedVoiceBlob) return;
 
         const text = (chat.draft ?? "").trim();
-        const hasVoice = Boolean(recordedVoiceBlob);
-        if (!text && !selectedImageFile && !hasVoice) return;
+        if (!text && !selectedImageFile) return;
 
         let imageUrl = null;
-        let audioUrl = null;
 
         try {
-            // UX-ограничение: voice отправляем отдельным действием (без смешивания с картинкой)
-            if (!hasVoice && selectedImageFile) {
+            if (selectedImageFile) {
                 imageUrl = await uploadSelectedImage();
                 if (!imageUrl) {
                     alert("Не удалось загрузить картинку.");
@@ -406,45 +403,81 @@ export default function ChatWindow({
                 }
             }
 
-            if (hasVoice) {
-                audioUrl = await uploadRecordedVoice(recordedVoiceBlob);
-                if (!audioUrl) {
-                    alert("Не удалось загрузить голосовое сообщение.");
-                    return;
-                }
-            }
-
-            if (imageUrl?.startsWith("blob:") || audioUrl?.startsWith("blob:")) {
+            if (imageUrl?.startsWith("blob:")) {
                 alert("Файл не загрузился на сервер. Повтори отправку.");
                 return;
             }
 
-            if (audioUrl) {
-                onSend({
-                    text: "",
+            if (imageUrl) {
+                onSend({ 
+                    text,
                     type: "media",
+                    imageUrl,
                     attachments: [
                         {
-                            mediaType: "audio",
-                            url: audioUrl,
-                            mimeType: recordedVoiceBlob.type || "audio/webm",
-                            sizeBytes: recordedVoiceBlob.size,
-                            durationMs: voiceDurationMs,
+                            mediaType: "image",
+                            url: imageUrl,
+                            mimeType: selectedImageFile?.type || null,
+                            sizeBytes: selectedImageFile?.size ?? null,
                         },
                     ],
                 });
             } else {
-                onSend({ text, imageUrl });
+                onSend({ text });
             }
 
             onDraftChange?.("");
             stopTypingNow();
             setEmojiOpen(false);
             clearSelectedImage();
-            clearRecordedVoice();
         } catch (err) {
             console.error(err);
             alert("Ошибка при отправке. Проверь сервер /upload.");
+        }
+    };
+
+    const handleSendVoice = async () => {
+        if (!chat || isRecordingVoice || !recordedVoiceBlob) return;
+
+        if (selectedImageFile) {
+            alert("Голосовое отправляется отдельно от картинки.");
+            return;
+        }
+
+        try {
+            const audioUrl = await uploadRecordedVoice(recordedVoiceBlob);
+            if (!audioUrl) {
+                alert("Не удалось загрузить голосовое сообщение.");
+
+                return;
+            }
+
+            if (audioUrl.startsWith("blob:")) {
+                alert("Файл не загрузился на сервер. Повтори отправку.");
+                return;
+            }
+
+            onSend({
+                text: "",
+                type: "media",
+                attachments: [
+                    {
+                        mediaType: "audio",
+                        url: audioUrl,
+                        mimeType: recordedVoiceBlob.type || "audio/webm",
+                        sizeBytes: recordedVoiceBlob.size,
+                        durationMs: voiceDurationMs,
+                    },
+                ],
+            });
+
+            onDraftChange?.("");
+            stopTypingNow();
+            setEmojiOpen(false);
+            clearRecordedVoice();
+        } catch (err) {
+            console.error(err);
+            alert("Ошибка при отправке голосового. Проверь сервер /upload.");
         }
     };
 
@@ -638,10 +671,16 @@ export default function ChatWindow({
                                 <div key={m.id} className={`message ${isMe ? "outgoing" : "incoming"}`}>
                                     <div className="bubble">
                                         {(() => {
-                                            const urls = Array.isArray(m.imageUrls)
+                                            const legacyUrls = Array.isArray(m.imageUrls)
                                                 ? m.imageUrls
                                                 : (m.imageUrl ? [m.imageUrl] : []);
-
+                                            const attachmentUrls = Array.isArray(m.attachments)
+                                                ? m.attachments
+                                                    .filter((attachment) => attachment?.mediaType === "image" && attachment?.url)
+                                                    .map((attachment) => attachment.url)
+                                                : [];
+                                            const urls = [...new Set([...legacyUrls, ...attachmentUrls])];
+                                            
                                             return urls.length ? (
                                                 <div className="message-images">
                                                     {urls.map((u) => (
@@ -651,7 +690,7 @@ export default function ChatWindow({
                                             ) : null;
                                         })()}
 
-                                         {Array.isArray(m.attachments)
+                                        {Array.isArray(m.attachments)
                                             ? m.attachments
                                                 .filter((attachment) => attachment?.mediaType === "audio" && attachment?.url)
                                                 .map((attachment) => (
@@ -703,6 +742,16 @@ export default function ChatWindow({
                                 {isRecordingVoice ? "● Запись" : "Голосовое готово"}
                             </span>
                             <span className="voice-recorder-time">{formatVoiceDuration(voiceDurationMs)}</span>
+                            {!isRecordingVoice ? (
+                                <button
+                                    type="button"
+                                    className="voice-send-btn"
+                                    onClick={handleSendVoice}
+                                    disabled={uploading || !recordedVoiceBlob || !canPublish}
+                                >
+                                    Отправить голосовое
+                                </button>
+                            ) : null}
                             <button
                                 type="button"
                                 className="voice-cancel-btn"

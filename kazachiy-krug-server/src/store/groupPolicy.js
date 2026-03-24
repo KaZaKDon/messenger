@@ -92,17 +92,26 @@ export function validateGroupMessage(chatId, message) {
     const hasText =
         typeof message?.text === "string" && message.text.trim().length > 0;
 
-    // поддерживаем и старое imageUrl, и новое imageUrls (массив)
+     // поддерживаем legacy imageUrl/imageUrls и новый media attachments(image)
     const hasSingle =
         typeof message?.imageUrl === "string" && message.imageUrl.trim().length > 0;
     const hasMany =
         Array.isArray(message?.imageUrls) &&
         message.imageUrls.filter(Boolean).length > 0;
 
-    if (!hasText || (!hasSingle && !hasMany)) {
+    const hasImageAttachment =
+        Array.isArray(message?.attachments) &&
+        message.attachments.some((attachment) => {
+            const mediaType = typeof attachment?.mediaType === "string"
+                ? attachment.mediaType.trim().toLowerCase()
+                : "";
+            return mediaType === "image" && typeof attachment?.url === "string" && attachment.url.trim().length > 0;
+        });
+
+    if (!hasText || (!hasSingle && !hasMany && !hasImageAttachment)) {
         return {
             ok: false,
-            reason: "Для групп 4–10 требуется формат: объявление + картинка (text + imageUrl).",
+            reason: "Для групп 4–10 требуется формат: объявление + картинка (text + image attachment).",
         };
     }
 

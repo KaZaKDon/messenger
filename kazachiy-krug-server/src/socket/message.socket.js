@@ -96,27 +96,46 @@ function canPublishToGroupByRule(rule, userId) {
     return false;
 }
 
+function getLegacyImageUrls(message) {
+    return [
+        typeof message?.imageUrl === "string" ? message.imageUrl : null,
+        ...(Array.isArray(message?.imageUrls) ? message.imageUrls : []),
+    ]
+        .filter((url) => typeof url === "string")
+        .map((url) => url.trim())
+        .filter(Boolean);
+}
+
+function getImageAttachmentUrls(message) {
+    if (!Array.isArray(message?.attachments)) return [];
+
+    return message.attachments
+        .filter((attachment) => {
+            const mediaType = typeof attachment?.mediaType === "string"
+                ? attachment.mediaType.trim().toLowerCase()
+                : "";
+            return mediaType === "image";
+        })
+        .map((attachment) => (typeof attachment?.url === "string" ? attachment.url.trim() : ""))
+        .filter(Boolean);
+}
+
+function hasImageContent(message) {
+    return [...new Set([...getLegacyImageUrls(message), ...getImageAttachmentUrls(message)])].length > 0;
+}
+
 function validateGroupMessageByRule(rule, message) {
     if (!rule) return { ok: true };
     if (rule.mode !== "announcements") return { ok: true };
     if (!rule.requiresAnnouncementWithImage) return { ok: true };
 
     const hasText = typeof message?.text === "string" && message.text.trim().length > 0;
-    const hasSingle = typeof message?.imageUrl === "string" && message.imageUrl.trim().length > 0;
-    const hasMany = Array.isArray(message?.imageUrls) && message.imageUrls.filter(Boolean).length > 0;
-    const hasImageAttachment = Array.isArray(message?.attachments)
-        && message.attachments.some((attachment) => {
-            const mediaType = typeof attachment?.mediaType === "string"
-                ? attachment.mediaType.trim().toLowerCase()
-                : "";
-            return mediaType === "image" && typeof attachment?.url === "string" && attachment.url.trim().length > 0;
-        });
-
-    if (!hasText || (!hasSingle && !hasMany && !hasImageAttachment)) {
+    if (!hasText || !hasImageContent(message)) {
         return {
             ok: false,
             reason: "Для групп 4–10 требуется формат: объявление + картинка (text + image attachment).",
         };
+
     }
 
     return { ok: true };
@@ -124,6 +143,26 @@ function validateGroupMessageByRule(rule, message) {
 
 const ALLOWED_MESSAGE_TYPES = new Set(["text", "media", "service"]);
 const ALLOWED_MEDIA_TYPES = new Set(["image", "audio", "video", "file"]);
+
+function hasAttachmentOfType(attachments, mediaType) {
+    return attachments.some((attachment) => attachment.mediaType === mediaType);
+}
+
+function collectLegacyImageAttachments(message, attachments) {
+    if (hasAttachmentOfType(attachments, "image")) return [];
+
+    return [...new Set(getLegacyImageUrls(message))].map((url) => ({
+        mediaType: "image",
+        url,
+        mimeType: null,
+        sizeBytes: null,
+        durationMs: null,
+        waveform: null,
+        width: null,
+        height: null,
+    }));
+}
+
 
 function normalizeMessageType(rawType) {
     if (typeof rawType !== "string") return "text";
@@ -156,14 +195,19 @@ function normalizeAttachments(rawAttachments) {
 }
 
 function normalizeMessagePayload(message) {
-    const attachments = normalizeAttachments(message?.attachments);
-    const hasAudioAttachment = attachments.some((attachment) => attachment.mediaType === "audio");
+    const normalizedAttachments = normalizeAttachments(message?.attachments);
+    const attachments = [
+        ...normalizedAttachments,
+        ...collectLegacyImageAttachments(message, normalizedAttachments),
+    ];
+    const hasAudioAttachment = hasAttachmentOfType(attachments, "audio");
+    const hasAnyAttachment = attachments.length > 0;
 
     return {
         text: hasAudioAttachment ? "" : (typeof message?.text === "string" ? message.text : ""),
-        type: hasAudioAttachment ? "media" : normalizeMessageType(message?.type),
-        imageUrl: typeof message?.imageUrl === "string" ? message.imageUrl : null,
-        imageUrls: Array.isArray(message?.imageUrls) ? message.imageUrls : null,
+        type: hasAnyAttachment ? "media" : normalizeMessageType(message?.type),
+        imageUrl: hasAnyAttachment ? null : (typeof message?.imageUrl === "string" ? message.imageUrl : null),
+        imageUrls: hasAnyAttachment ? null : (Array.isArray(message?.imageUrls) ? message.imageUrls : null),
         attachments,
     };
 }

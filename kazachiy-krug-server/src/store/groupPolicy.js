@@ -1,3 +1,4 @@
+import { hasImageContent } from "../utils/messageMedia.js";
 import { usersById } from "./users.js";
 
 const ALL_USERS = Object.keys(usersById);
@@ -32,6 +33,34 @@ const GROUP_CONFIG = [
 
 const ANNOUNCEMENT_MODE_ENABLED = true;
 
+function getLegacyImageUrls(message) {
+    return [
+        typeof message?.imageUrl === "string" ? message.imageUrl : null,
+        ...(Array.isArray(message?.imageUrls) ? message.imageUrls : []),
+    ]
+        .filter((url) => typeof url === "string")
+        .map((url) => url.trim())
+        .filter(Boolean);
+}
+
+function getImageAttachmentUrls(message) {
+    if (!Array.isArray(message?.attachments)) return [];
+
+    return message.attachments
+        .filter((attachment) => {
+            const mediaType = typeof attachment?.mediaType === "string"
+                ? attachment.mediaType.trim().toLowerCase()
+                : "";
+            return mediaType === "image";
+        })
+        .map((attachment) => (typeof attachment?.url === "string" ? attachment.url.trim() : ""))
+        .filter(Boolean);
+}
+
+function hasImageContent(message) {
+    return [...new Set([...getLegacyImageUrls(message), ...getImageAttachmentUrls(message)])].length > 0;
+}
+
 function buildGroup(cfg = {}) {
     const id = cfg.id;
 
@@ -58,16 +87,6 @@ function buildGroup(cfg = {}) {
             cfg.requiresAnnouncementWithImage ?? mode === "announcements",
     };
 }
-
-export const GROUP_RULES = GROUP_CONFIG.reduce((acc, cfg) => {
-    acc[cfg.id] = buildGroup(cfg);
-    return acc;
-}, {});
-
-export function getGroupRuleByChatId(chatId) {
-    return GROUP_RULES[chatId] ?? null;
-}
-
 export function canPublishToGroup(chatId, userId) {
     const group = getGroupRuleByChatId(chatId);
     if (!group) return true;
@@ -92,23 +111,7 @@ export function validateGroupMessage(chatId, message) {
     const hasText =
         typeof message?.text === "string" && message.text.trim().length > 0;
 
-     // поддерживаем legacy imageUrl/imageUrls и новый media attachments(image)
-    const hasSingle =
-        typeof message?.imageUrl === "string" && message.imageUrl.trim().length > 0;
-    const hasMany =
-        Array.isArray(message?.imageUrls) &&
-        message.imageUrls.filter(Boolean).length > 0;
-
-    const hasImageAttachment =
-        Array.isArray(message?.attachments) &&
-        message.attachments.some((attachment) => {
-            const mediaType = typeof attachment?.mediaType === "string"
-                ? attachment.mediaType.trim().toLowerCase()
-                : "";
-            return mediaType === "image" && typeof attachment?.url === "string" && attachment.url.trim().length > 0;
-        });
-
-    if (!hasText || (!hasSingle && !hasMany && !hasImageAttachment)) {
+    if (!hasText || !hasImageContent(message)) {
         return {
             ok: false,
             reason: "Для групп 4–10 требуется формат: объявление + картинка (text + image attachment).",

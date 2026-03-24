@@ -176,6 +176,79 @@ test("message:send allows announcement with image attachment and text", async ()
     }
 });
 
+
+
+test("message:send canonicalizes legacy imageUrl payload into image attachment", async () => {
+    const socket = createFakeSocket("user-1");
+    messageSocket(createFakeIo(), socket);
+
+    const originalChatFindFirst = prisma.chat.findFirst;
+    const originalGroupRuleFindUnique = prisma.groupRule.findUnique;
+    const originalMessageCreate = prisma.message.create;
+
+    let createPayload = null;
+
+    prisma.chat.findFirst = async () => ({
+        id: "group-1",
+        type: "group",
+        members: [{ userId: "user-1" }, { userId: "user-2" }],
+    });
+    prisma.groupRule.findUnique = async () => ({
+        mode: "chat",
+        requiresAnnouncementWithImage: false,
+        publishUserIds: null,
+    });
+    prisma.message.create = async (payload) => {
+        createPayload = payload;
+        return {
+            id: "m-img-1",
+            chatId: "group-1",
+            senderId: "user-1",
+            text: payload.data.text,
+            type: payload.data.type,
+            imageUrl: payload.data.imageUrl,
+            imageUrls: payload.data.imageUrls,
+            attachments: payload.data.attachments.create.map((attachment, idx) => ({
+                id: `img-a-${idx + 1}`,
+                ...attachment,
+            })),
+            status: "sent",
+            createdAt: new Date(),
+        };
+    };
+
+    try {
+        const handler = socket.handlers.get("message:send");
+        assert.ok(handler, "message:send handler should be registered");
+
+        await handler({
+            id: "m-img-1",
+            chatId: "group-1",
+            text: "photo",
+            imageUrl: "/uploads/photo.png",
+        });
+
+        assert.ok(createPayload, "prisma.message.create should be called");
+        assert.equal(createPayload.data.type, "media");
+        assert.equal(createPayload.data.imageUrl, null);
+        assert.equal(createPayload.data.imageUrls, null);
+        assert.equal(createPayload.data.attachments.create.length, 1);
+        assert.equal(createPayload.data.attachments.create[0].mediaType, "image");
+        assert.equal(createPayload.data.attachments.create[0].url, "/uploads/photo.png");
+
+        const newEvent = socket.emitted.find((item) => item.event === "message:new");
+        assert.ok(newEvent, "message:new should be emitted");
+        assert.equal(newEvent.payload.type, "media");
+        assert.equal(newEvent.payload.imageUrl, null);
+        assert.equal(newEvent.payload.attachments[0].mediaType, "image");
+    } finally {
+        prisma.chat.findFirst = originalChatFindFirst;
+        prisma.groupRule.findUnique = originalGroupRuleFindUnique;
+        prisma.message.create = originalMessageCreate;
+    }
+});
+
+
 test("message:send normalizes invalid message type and attachment media type", async () => {
     const socket = createFakeSocket("user-1");
     messageSocket(createFakeIo(), socket);

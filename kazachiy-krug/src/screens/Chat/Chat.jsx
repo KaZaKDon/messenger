@@ -88,22 +88,24 @@ export default function Chat({ currentUser }) {
             : [];
         const hasAttachments = normalizedAttachments.length > 0;
         const hasAudioAttachment = normalizedAttachments.some((item) => item.mediaType === "audio");
+        const hasImageAttachment = normalizedAttachments.some((item) => item.mediaType === "image");
         const hasAnyAttachment = hasAttachments;
 
         // защита от совсем пустого
         if (!cleanText.trim() && !hasAnyImage && !hasAttachments) return;
 
-        // контракт: voice всегда отправляем как media + attachments + empty text
+        // контракт: media сообщения отправляем через attachments; для voice текст пустой
         const normalizedText = hasAudioAttachment ? "" : cleanText;
         const normalizedType = hasAnyAttachment ? "media" : (type ?? (hasAttachments ? "media" : "text"));
-
+        const normalizedImageUrl = hasImageAttachment ? null : (imageUrl ?? null);
+        const normalizedImageUrls = hasImageAttachment ? undefined : (Array.isArray(imageUrls) ? imageUrls : undefined);
 
         const message = {
             id: crypto.randomUUID(),
             chatId: resolvedChatId,
             text: normalizedText,
-            imageUrl: imageUrl ?? null,
-            imageUrls: Array.isArray(imageUrls) ? imageUrls : undefined,
+            imageUrl: normalizedImageUrl,
+            imageUrls: normalizedImageUrls,
             type: normalizedType,
             attachments: hasAttachments ? normalizedAttachments : undefined,
 

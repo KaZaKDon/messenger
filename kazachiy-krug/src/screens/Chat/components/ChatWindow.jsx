@@ -61,6 +61,9 @@ export default function ChatWindow({
 
     // ✅ emoji UI
     const [emojiOpen, setEmojiOpen] = useState(false);
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
+    const [searchText, setSearchText] = useState("");
+    const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
 
     // ✅ режим для групп 4–10: FEED (по умолчанию) / CREATE (форма)
     const [announcementMode, setAnnouncementMode] = useState("feed"); // "feed" | "create"
@@ -102,6 +105,7 @@ export default function ChatWindow({
     const mediaRecorderRef = useRef(null);
     const mediaStreamRef = useRef(null);
     const voiceChunksRef = useRef([]);
+    const voiceCancelRequestedRef = useRef(false);
     const voiceStartedAtRef = useRef(0);
     const voiceTimerRef = useRef(null);
 
@@ -219,6 +223,7 @@ export default function ChatWindow({
         try {
             clearSelectedImage();
             clearRecordedVoice();
+            voiceCancelRequestedRef.current = false;
             voiceChunksRef.current = [];
             setVoiceDurationMs(0);
 
@@ -241,10 +246,15 @@ export default function ChatWindow({
                 stopVoiceTimer();
                 stopVoiceTracks();
 
+                const wasCanceled = voiceCancelRequestedRef.current;
+                voiceCancelRequestedRef.current = false;
+
                 const fallbackMime = mimeType || "audio/webm";
                 const blob = new Blob(voiceChunksRef.current, { type: fallbackMime });
-                if (blob.size > 0) {
+                if (!wasCanceled && blob.size > 0) {
                     setRecordedVoiceBlob(blob);
+                    } else if (wasCanceled) {
+                    clearRecordedVoice();
                 }
 
                 mediaRecorderRef.current = null;
@@ -270,6 +280,7 @@ export default function ChatWindow({
 
     const stopVoiceRecording = useCallback(() => {
         if (!isRecordingVoice) return;
+        voiceCancelRequestedRef.current = false;
 
         const recorder = mediaRecorderRef.current;
         if (recorder && recorder.state !== "inactive") {
@@ -282,9 +293,12 @@ export default function ChatWindow({
         setIsRecordingVoice(false);
     }, [isRecordingVoice, stopVoiceTimer, stopVoiceTracks]);
 
-    const cancelVoiceRecording = useCallback(() => {
-        if (isRecordingVoice) {
-            mediaRecorderRef.current?.stop();
+    const resetVoiceComposer = useCallback(() => {
+        voiceCancelRequestedRef.current = true;
+
+        const recorder = mediaRecorderRef.current;
+        if (recorder && recorder.state !== "inactive") {
+            recorder.stop();
         }
 
         stopVoiceTimer();
@@ -292,7 +306,11 @@ export default function ChatWindow({
         setIsRecordingVoice(false);
         clearRecordedVoice();
         voiceChunksRef.current = [];
-    }, [clearRecordedVoice, isRecordingVoice, stopVoiceTimer, stopVoiceTracks]);
+    }, [clearRecordedVoice, stopVoiceTimer, stopVoiceTracks]);
+
+    const cancelVoiceRecording = useCallback(() => {
+        resetVoiceComposer();
+    }, [resetVoiceComposer]);
 
     const handleMessagesScroll = useCallback(
         (event) => {
@@ -357,8 +375,8 @@ export default function ChatWindow({
     useEffect(() => {
         stopTypingNow();
         setEmojiOpen(false);
-        cancelVoiceRecording();
-    }, [cancelVoiceRecording, chat?.id, stopTypingNow]);
+        resetVoiceComposer();
+    }, [chat?.id, resetVoiceComposer, stopTypingNow]);
 
     useEffect(() => () => {
         stopVoiceTimer();
@@ -518,6 +536,53 @@ export default function ChatWindow({
             ? (otherPhone ? otherPhone : (activeUser?.isOnline ? "в сети" : "не в сети"))
             : `${onlineCount} онлайн`
         : "чат не выбран";
+    const filteredMessages = useMemo(() => {
+        const allMessages = chat?.messages ?? [];
+        const q = searchText.trim().toLowerCase();
+        if (!q) return allMessages;
+
+        return allMessages.filter((message) => {
+            const text = typeof message?.text === "string" ? message.text.toLowerCase() : "";
+            const senderName = typeof message?.senderName === "string" ? message.senderName.toLowerCase() : "";
+            const senderId = typeof message?.senderId === "string" ? message.senderId.toLowerCase() : "";
+
+            const legacyUrls = [
+                typeof message?.imageUrl === "string" ? message.imageUrl : "",
+                ...(Array.isArray(message?.imageUrls) ? message.imageUrls : []),
+            ]
+                .filter(Boolean)
+                .map((item) => String(item).toLowerCase());
+
+            const attachments = Array.isArray(message?.attachments) ? message.attachments : [];
+            const attachmentMeta = attachments
+                .flatMap((attachment) => [
+                    attachment?.mediaType,
+                    attachment?.mimeType,
+                    attachment?.url,
+                    attachment?.fileName,
+                ])
+                .filter(Boolean)
+                .map((item) => String(item).toLowerCase());
+
+            const hasImageAttachment = attachments.some((attachment) => attachment?.mediaType === "image");
+            const hasAudioAttachment = attachments.some((attachment) => attachment?.mediaType === "audio");
+            const mediaKeywords = [
+                hasImageAttachment ? "image фото картинка" : "",
+                hasAudioAttachment ? "audio аудио голос голосовое" : "",
+            ].join(" ");
+
+            const haystack = [
+                text,
+                senderName,
+                senderId,
+                ...legacyUrls,
+                ...attachmentMeta,
+                mediaKeywords,
+            ].join(" ");
+
+            return haystack.includes(q);
+        });
+    }, [chat?.messages, searchText]);
 
     return (
         <section className={`chat-window ${className}`.trim()}>
@@ -539,10 +604,58 @@ export default function ChatWindow({
                     </div>
                 </div>
                 <div className="chat-header-actions">
-                    <button type="button" aria-label="search">⌕</button>
-                    <button type="button" aria-label="menu">⋯</button>
+                    <button
+                        type="button"
+                        aria-label="search"
+                        onClick={() => {
+                            setIsSearchOpen((prev) => !prev);
+                            setIsHeaderMenuOpen(false);
+                        }}
+                    >
+                        ⌕
+                    </button>
+                    <button
+                        type="button"
+                        aria-label="menu"
+                        onClick={() => setIsHeaderMenuOpen((prev) => !prev)}
+                    >
+                        ⋯
+                    </button>
                 </div>
             </header>
+            {isSearchOpen ? (
+                <div className="chat-search">
+                    <input
+                        value={searchText}
+                        onChange={(event) => setSearchText(event.target.value)}
+                        placeholder="Поиск по сообщениям..."
+                    />
+                    <button type="button" onClick={() => setSearchText("")}>Сброс</button>
+                </div>
+            ) : null}
+
+            {isHeaderMenuOpen ? (
+                <div className="chat-header-menu">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setIsSearchOpen(true);
+                            setIsHeaderMenuOpen(false);
+                        }}
+                    >
+                        Поиск сообщений
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+                            setIsHeaderMenuOpen(false);
+                        }}
+                    >
+                        К последнему сообщению
+                    </button>
+                </div>
+            ) : null}
 
             {chat?.typingUsers?.length ? <span className="chat-typing">печатает...</span> : null}
 
@@ -579,7 +692,7 @@ export default function ChatWindow({
                                     </div>
                                 ) : null}
 
-                                {chat?.messages?.map((m) => (
+                                {filteredMessages.map((m) => (
                                     <AnnouncementCard
                                         key={m.id}
                                         message={m}
@@ -663,7 +776,7 @@ export default function ChatWindow({
                             </div>
                         ) : null}
 
-                        {chat?.messages?.map((m) => {
+                        {filteredMessages.map((m) => {
                             const hasSender = Boolean(m.senderId);
                             const isMe = hasSender ? m.senderId === currentUserId : m.fromMe === true;
 

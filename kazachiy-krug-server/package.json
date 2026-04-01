@@ -10,8 +10,9 @@
         "seed:history": "node prisma/seed-history.js",
         "db:setup": "npm run migrate:deploy && npm run prisma:seed && npm run seed:history",
         "db:setup:full": "npm run prisma:generate && npm run db:setup",
+        "lint": "find src prisma -name '*.js' -print0 | xargs -0 -n1 node --check",
         "test": "node --test src/**/__tests__/*.test.js",
-        "verify": "npm run test",
+        "verify": "npm run lint && npm run test",
         "pretest": "npm run prisma:generate"
 
     },
@@ -39,8 +40,5 @@
     "devDependencies": {
         "nodemon": "^3.1.11",
         "prisma": "^6.16.2"
-    },
-    "prisma": {
-        "seed": "node prisma/seed.js"
     }
 }

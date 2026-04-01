@@ -65,7 +65,6 @@ export default function AppFrame({ currentUser, isNightMode, setIsNightMode, chi
 
             <AppSidebar
                 currentUser={currentUser}
-                onDisabledClick={() => alert("Раздел пока в разработке")}
                 isNightMode={isNightMode}
                 onNightModeChange={setIsNightMode}
                 isOpen={isSidebarOpen}

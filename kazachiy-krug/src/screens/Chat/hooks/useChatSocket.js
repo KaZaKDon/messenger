@@ -15,11 +15,9 @@ export function useChatSocket(
 
         if (!currentUser?.id) return;
 
-        // ВАЖНО: запрашиваем список при каждом входе на экран чата.
-        // Иначе после перехода в /profile или /settings и обратно
-        // список кругов/чатов может остаться пустым.
-        socket.emit("users:get");
-
+        const requestUsers = () => {
+            socket.emit("users:get");
+        };
 
         const onUsers = (users) => {
             console.log("📥 users from socket:", users);
@@ -27,9 +25,14 @@ export function useChatSocket(
         };
 
         socket.on("users:list", onUsers);
+        socket.on("connect", requestUsers);
+        socket.on("auth:success", requestUsers);
+        requestUsers();
 
         return () => {
             socket.off("users:list", onUsers);
+            socket.off("connect", requestUsers);
+            socket.off("auth:success", requestUsers);
         };
     }, [currentUser?.id, dispatch]);
 

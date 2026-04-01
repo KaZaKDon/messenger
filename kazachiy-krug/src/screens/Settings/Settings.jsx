@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "./settings.css";
 
 const SETTINGS_ITEMS = [
@@ -12,6 +13,17 @@ const SETTINGS_ITEMS = [
 
 export default function Settings() {
     const [openedItem, setOpenedItem] = useState(null);
+    const navigate = useNavigate();
+
+    const handleDeleteAccount = () => {
+        const confirmed = window.confirm("Удалить аккаунт на этом устройстве?");
+        if (!confirmed) return;
+
+        sessionStorage.removeItem("currentUser");
+        sessionStorage.removeItem("phone");
+        navigate("/phone", { replace: true });
+        window.location.reload();
+    };
 
 
     return (
@@ -42,7 +54,7 @@ export default function Settings() {
                     ))}
                 </ul>
 
-                <button type="button" className="settings-delete-btn">
+                <button type="button" className="settings-delete-btn" onClick={handleDeleteAccount}>
                     ⦿ Удалить аккаунт
                 </button>
             </div>

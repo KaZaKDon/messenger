@@ -5,7 +5,6 @@ function isGroupId(id) {
 }
 
 function getGroupNumber(id) {
-    // group-10 -> 10
     const num = Number(String(id).split("-")[1]);
     return Number.isFinite(num) ? num : Number.MAX_SAFE_INTEGER;
 }
@@ -23,6 +22,12 @@ function formatTime(timestamp) {
     });
 }
 
+function getPreviewText(lastMessage) {
+    if (!lastMessage) return "";
+    if (typeof lastMessage.text === "string" && lastMessage.text.trim()) return lastMessage.text;
+    return "Вложение";
+}
+
 export default function DialogList({
     currentUserId,
     users,
@@ -31,64 +36,64 @@ export default function DialogList({
     onSelect,
     className = "",
 }) {
+    const [queryInput, setQueryInput] = useState("");
     const [query, setQuery] = useState("");
+
+    const applySearch = () => {
+        setQuery(queryInput.trim());
+    };
 
     const dialogItems = useMemo(() => {
         const normalizedQuery = query.trim().toLowerCase();
 
         const items = users
-            .filter((user) => {
-                if (!normalizedQuery) return true;
-                return user.name.toLowerCase().includes(normalizedQuery);
-            })
             .map((user) => {
                 const group = isGroupId(user.id);
-
-                // ✅ ВАЖНО:
-                // - для группы chatId = group-id
-                // - для лички chatId = room-user-user
                 const chatId = group ? user.id : getPrivateChatId(currentUserId, user.id);
-
                 const chat = chats[chatId];
                 const messages = chat?.messages ?? [];
                 const lastMessage = messages[messages.length - 1] ?? null;
 
-                const unread = messages.filter(
-                    (message) =>
-                        message.senderId !== currentUserId && message.status !== "read"
-                ).length;
+                // Требование: группы показываем всегда.
+                // Контакты показываем только если в чате есть хотя бы одно сообщение.
+                if (!group && messages.length === 0) return null;
+
+                if (normalizedQuery && !user.name.toLowerCase().includes(normalizedQuery)) {
+                    return null;
+                }
 
                 return {
-                    user,
-                    chatId,
+                    key: user.id,
+                    selectId: user.id,
+                    name: user.name,
+                    isOnline: Boolean(user.isOnline),
                     isGroup: group,
                     groupOrder: group ? getGroupNumber(user.id) : null,
-                    lastText: lastMessage?.text ?? "Нет сообщений",
-                    isEmpty: messages.length === 0,
+                    lastText: getPreviewText(lastMessage),
                     lastMessageAt: lastMessage?.createdAt ?? 0,
                     lastTime: formatTime(lastMessage?.createdAt),
-                    unread,
+                    unread: messages.filter(
+                        (message) => message.senderId !== currentUserId && message.status !== "read"
+                    ).length,
                 };
-            });
+            })
+            .filter(Boolean);
 
         return items.sort((a, b) => {
-            // 1) Группы всегда сверху
             if (a.isGroup && !b.isGroup) return -1;
             if (!a.isGroup && b.isGroup) return 1;
 
-            // 2) Обе группы — строго по номеру group-N
             if (a.isGroup && b.isGroup) {
                 return (a.groupOrder ?? 0) - (b.groupOrder ?? 0);
             }
 
-            // 3) Оба личных — твоя старая логика
             if (a.lastMessageAt !== b.lastMessageAt) {
                 return b.lastMessageAt - a.lastMessageAt;
             }
 
             if (a.unread !== b.unread) return b.unread - a.unread;
 
-            return a.user.name.localeCompare(b.user.name, "ru");
+            return a.name.localeCompare(b.name, "ru");
         });
     }, [chats, currentUserId, query, users]);
 
@@ -97,33 +102,34 @@ export default function DialogList({
             <div className="dialog-search">
                 <input
                     type="text"
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
+                    value={queryInput}
+                    onChange={(event) => setQueryInput(event.target.value)}
                     placeholder="Поиск"
+                    onKeyDown={(event) => {
+                        if (event.key === "Enter") applySearch();
+                    }}
                 />
-                <button type="button">Поиск</button>
+                <button type="button" onClick={applySearch}>Поиск</button>
             </div>
 
-            {dialogItems.map(({ user, unread, lastText, lastTime, isEmpty }) => (
+            {dialogItems.map(({ key, selectId, name, isOnline, unread, lastText, lastTime }) => (
                 <div
-                    key={user.id}
-                    className={`dialog-card ${user.id === activeUserId ? "active" : ""} ${isEmpty ? "empty" : ""
-                        }`}
-                    onClick={() => onSelect(user.id)}
+                    key={key}
+                    className={`dialog-card ${selectId === activeUserId ? "active" : ""}`}
+                    onClick={() => onSelect(selectId)}
                 >
                     <div className="dialog-card-top">
                         <div className="dialog-user">
                             <span
-                                className={`user-status ${user.isOnline ? "online" : "offline"}`}
+                                className={`user-status ${isOnline ? "online" : "offline"}`}
                             />
-                            <span className="dialog-name">{user.name}</span>
+                            <span className="dialog-name">{name}</span>
                         </div>
                         <span className="dialog-time">{lastTime}</span>
                     </div>
 
                     <div className="dialog-card-bottom">
-                        <span className="dialog-preview">{lastText}</span>
-                        {isEmpty ? <span className="dialog-empty-badge">Пустой чат</span> : null}
+                        <span className="dialog-preview">{lastText || "Нет сообщений"}</span>
                         {unread > 0 ? <span className="dialog-unread">{unread}</span> : null}
                     </div>
                 </div>

@@ -85,7 +85,7 @@ router.post(
         { name: "image", maxCount: 1 },
     ]),
     (req, res) => {
-        const file = pickUploadedFile(req);
+        const { file, error } = pickUploadedFile(req.files);
         if (error) return res.status(400).json({ message: error });
         if (!file) return res.status(400).json({ message: "No file uploaded" });
 

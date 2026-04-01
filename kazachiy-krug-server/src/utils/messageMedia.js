@@ -28,4 +28,3 @@ export function getAllImageUrls(message) {
 export function hasImageContent(message) {
     return getAllImageUrls(message).length > 0;
 }
-kazachiy-krug/src/screens/Chat/Chat.jsxkazachiy-krug/src/screens/Chat/Chat.jsx

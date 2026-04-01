@@ -4,6 +4,7 @@ import path from "path";
 
 import authRoutes from "./routes/auth.js";
 import uploadRouter from "./routes/upload.js";
+import meRoutes from "./routes/me.js";
 
 const app = express();
 
@@ -18,6 +19,10 @@ app.use(uploadRouter);
 
 // Auth
 app.use("/auth", authRoutes);
+
+// Profile
+app.use(meRoutes);
+
 
 app.get("/", (req, res) => {
     res.send("Kazachiy Krug server is running");

@@ -5,6 +5,9 @@ import Code from "../screens/Auth/Code";
 import Chat from "../screens/Chat/Chat";
 import Settings from "../screens/Settings/Settings";
 import Profile from "../screens/Profile/Profile";
+import Calls from "../screens/Calls/Calls";
+import Favorites from "../screens/Favorites/Favorites";
+import MyAds from "../screens/MyAds/MyAds";
 import AppFrame from "../layouts/AppFrame";
 
 export default function AppRouter({ currentUser,
@@ -79,6 +82,57 @@ export default function AppRouter({ currentUser,
                         )
 
 
+                        : <Navigate to="/phone" replace />
+                }
+            />
+
+            <Route
+                path="/my-ads"
+                element={
+                    isAuth
+                        ? (
+                            <AppFrame
+                                currentUser={currentUser}
+                                isNightMode={isNightMode}
+                                setIsNightMode={setIsNightMode}
+                            >
+                                <MyAds />
+                            </AppFrame>
+                        )
+                        : <Navigate to="/phone" replace />
+                }
+            />
+
+            <Route
+                path="/favorites"
+                element={
+                    isAuth
+                        ? (
+                            <AppFrame
+                                currentUser={currentUser}
+                                isNightMode={isNightMode}
+                                setIsNightMode={setIsNightMode}
+                            >
+                                <Favorites />
+                            </AppFrame>
+                        )
+                        : <Navigate to="/phone" replace />
+                }
+            />
+
+            <Route
+                path="/calls"
+                element={
+                    isAuth
+                        ? (
+                            <AppFrame
+                                currentUser={currentUser}
+                                isNightMode={isNightMode}
+                                setIsNightMode={setIsNightMode}
+                            >
+                                <Calls />
+                            </AppFrame>
+                        )
                         : <Navigate to="/phone" replace />
                 }
             />

@@ -1,4 +1,5 @@
-import { useMemo, useReducer } from "react";
+import { useEffect, useMemo, useReducer } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { chatReducer, initialState } from "./chatReducer";
 import { useChatSocket } from "./hooks/useChatSocket";
 import DialogList from "./components/DialogList";
@@ -12,8 +13,31 @@ function getPrivateChatId(userA, userB) {
     return `room-${[userA, userB].sort().join("-")}`;
 }
 
+const ADS_STORAGE_KEY = "myAnnouncements";
+
+function saveMyAnnouncement(message, chatId) {
+    if (!/^group-(?:[4-9]|10)$/.test(chatId)) return;
+
+    try {
+        const raw = localStorage.getItem(ADS_STORAGE_KEY);
+        const current = raw ? JSON.parse(raw) : [];
+        const next = Array.isArray(current) ? current : [];
+        next.unshift({
+            id: message.id,
+            chatId,
+            text: message.text,
+            createdAt: new Date().toISOString(),
+        });
+        localStorage.setItem(ADS_STORAGE_KEY, JSON.stringify(next.slice(0, 200)));
+    } catch {
+        // ignore local storage errors
+    }
+}
+
 
 export default function Chat({ currentUser }) {
+    const location = useLocation();
+    const navigate = useNavigate();
     const [state, dispatch] = useReducer(chatReducer, {
         ...initialState,
         activeChatUserId: null,
@@ -21,6 +45,24 @@ export default function Chat({ currentUser }) {
     });
 
     const { users, chats, activeChatUserId, activeChatId } = state;
+    const userToOpen = useMemo(() => {
+        const params = new URLSearchParams(location.search);
+        return params.get("user");
+    }, [location.search]);
+
+    useEffect(() => {
+        if (!userToOpen || userToOpen === currentUser.id) return;
+        if (activeChatUserId === userToOpen) return;
+
+        const existsInUsers = users.some((user) => user.id === userToOpen);
+        if (!existsInUsers && !userToOpen.startsWith("group-")) return;
+
+        dispatch({ type: "SET_ACTIVE_CHAT_USER", payload: userToOpen });
+
+        // Важно: query-параметр ?user= используем только для первичного открытия.
+        // После этого убираем его, чтобы ручной выбор в списке чатов не перезаписывался.
+        navigate("/chat", { replace: true });
+    }, [activeChatUserId, currentUser.id, navigate, userToOpen, users]);
 
     const resolvedChatId = useMemo(() => {
         if (activeChatId) return activeChatId;
@@ -115,6 +157,7 @@ export default function Chat({ currentUser }) {
         };
 
         socket.emit("message:send", message);
+        saveMyAnnouncement(message, resolvedChatId);
 
         dispatch({
             type: "RECEIVE_MESSAGE",

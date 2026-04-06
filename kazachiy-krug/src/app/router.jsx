@@ -130,7 +130,7 @@ export default function AppRouter({ currentUser,
                                 isNightMode={isNightMode}
                                 setIsNightMode={setIsNightMode}
                             >
-                                <Calls />
+                                <Calls currentUser={currentUser} />
                             </AppFrame>
                         )
                         : <Navigate to="/phone" replace />

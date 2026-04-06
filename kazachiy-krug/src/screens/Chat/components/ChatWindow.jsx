@@ -7,6 +7,7 @@ import {
 } from "react";
 import AnnouncementComposer from "./AnnouncementComposer";
 import AnnouncementCard from "./AnnouncementCard";
+import { getSocket } from "../../../shared/socket";
 
 const API_BASE = "http://localhost:3000";
 
@@ -32,6 +33,13 @@ function formatVoiceDuration(totalMs) {
     return `${minutes}:${seconds}`;
 }
 
+function formatCallDuration(totalSeconds) {
+    const seconds = Math.max(0, Math.floor(totalSeconds));
+    const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
+    const ss = String(seconds % 60).padStart(2, "0");
+    return `${mm}:${ss}`;
+}
+
 
 export default function ChatWindow({
     chat,
@@ -44,6 +52,7 @@ export default function ChatWindow({
     onTypingStop,
     onWriteToAuthor, // ✅ новый колбэк
     onLoadOlderMessages,
+    onStartCall,
     className = "",
     onBackToList,
 
@@ -64,6 +73,9 @@ export default function ChatWindow({
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [searchText, setSearchText] = useState("");
     const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
+    const [activeCall, setActiveCall] = useState(null);
+    const [callOverlayError, setCallOverlayError] = useState("");
+    const [callElapsedSec, setCallElapsedSec] = useState(0);
 
     // ✅ режим для групп 4–10: FEED (по умолчанию) / CREATE (форма)
     const [announcementMode, setAnnouncementMode] = useState("feed"); // "feed" | "create"
@@ -72,6 +84,109 @@ export default function ChatWindow({
         // при смене чата всегда возвращаемся на ленту
         setAnnouncementMode("feed");
     }, [chat?.id]);
+
+    useEffect(() => {
+        if (!chat?.id || !currentUserId) {
+            setActiveCall(null);
+            setCallOverlayError("");
+            return undefined;
+        }
+
+        const socket = getSocket();
+        if (!socket) return undefined;
+
+        const inCurrentChat = (payload = {}) => payload?.chatId === chat.id;
+
+        const onStarted = (payload = {}) => {
+            if (!inCurrentChat(payload)) return;
+            setCallOverlayError("");
+            setActiveCall({
+                callId: payload.callId,
+                chatId: payload.chatId,
+                type: payload.type ?? "audio",
+                status: payload.status ?? "initiated",
+                direction: "outgoing",
+                startedAt: null,
+            });
+        };
+
+        const onIncoming = (payload = {}) => {
+            if (!inCurrentChat(payload)) return;
+            setCallOverlayError("");
+            setActiveCall({
+                callId: payload.callId,
+                chatId: payload.chatId,
+                type: payload.type ?? "audio",
+                status: payload.status ?? "ringing",
+                direction: "incoming",
+                startedAt: null,
+            });
+        };
+
+        const onRinging = (payload = {}) => {
+            if (!inCurrentChat(payload)) return;
+            setActiveCall((prev) => (prev?.callId === payload.callId
+                ? { ...prev, status: payload.status ?? "ringing" }
+                : prev));
+        };
+
+        const onAccepted = (payload = {}) => {
+            if (!inCurrentChat(payload)) return;
+            setActiveCall((prev) => (prev?.callId === payload.callId
+                ? { ...prev, status: payload.status ?? "connected", startedAt: payload?.startedAt ?? new Date().toISOString() }
+                : prev));
+        };
+
+        const onFinished = (payload = {}) => {
+            if (!inCurrentChat(payload)) return;
+            setActiveCall((prev) => (prev?.callId === payload.callId
+                ? { ...prev, status: "ended" }
+                : prev));
+
+            setTimeout(() => {
+                setActiveCall((prev) => (prev?.callId === payload.callId ? null : prev));
+            }, 1500);
+        };
+
+        const onCallError = ({ chatId, message } = {}) => {
+            if (chatId && chatId !== chat.id) return;
+            setCallOverlayError(message ?? "Ошибка звонка");
+        };
+
+        socket.on("call:started", onStarted);
+        socket.on("call:incoming", onIncoming);
+        socket.on("call:ringing", onRinging);
+        socket.on("call:accepted", onAccepted);
+        socket.on("call:declined", onFinished);
+        socket.on("call:ended", onFinished);
+        socket.on("call:error", onCallError);
+
+        return () => {
+            socket.off("call:started", onStarted);
+            socket.off("call:incoming", onIncoming);
+            socket.off("call:ringing", onRinging);
+            socket.off("call:accepted", onAccepted);
+            socket.off("call:declined", onFinished);
+            socket.off("call:ended", onFinished);
+            socket.off("call:error", onCallError);
+        };
+    }, [chat?.id, currentUserId]);
+
+    useEffect(() => {
+        if (!activeCall || activeCall.status !== "connected") {
+            setCallElapsedSec(0);
+            return undefined;
+        }
+
+        const baseMs = activeCall.startedAt ? new Date(activeCall.startedAt).getTime() : Date.now();
+        const tick = () => {
+            const diff = Math.max(0, Date.now() - baseMs);
+            setCallElapsedSec(Math.floor(diff / 1000));
+        };
+        tick();
+        const id = setInterval(tick, 1000);
+        return () => clearInterval(id);
+    }, [activeCall]);
 
     const hasMoreHistory = Boolean(chat?.hasMoreHistory);
     const historyLoading = Boolean(chat?.historyLoading);
@@ -604,6 +719,26 @@ export default function ChatWindow({
                     </div>
                 </div>
                 <div className="chat-header-actions">
+                    {hasSelectedChat && !chat?.id?.startsWith?.("group-") ? (
+                        <>
+                            <button
+                                type="button"
+                                aria-label="audio-call"
+                                title="Аудиозвонок"
+                                onClick={() => onStartCall?.("audio")}
+                            >
+                                📞
+                            </button>
+                            <button
+                                type="button"
+                                aria-label="video-call"
+                                title="Видеозвонок"
+                                onClick={() => onStartCall?.("video")}
+                            >
+                                🎥
+                            </button>
+                        </>
+                    ) : null}
                     <button
                         type="button"
                         aria-label="search"
@@ -623,6 +758,50 @@ export default function ChatWindow({
                     </button>
                 </div>
             </header>
+            {activeCall ? (
+                <div className="chat-call-overlay">
+                    <strong>{activeCall.type === "video" ? "🎥 Видеозвонок" : "📞 Аудиозвонок"}</strong>
+                    <span className="chat-type">
+                        {activeCall.direction === "incoming" ? "Входящий" : "Исходящий"} • {activeCall.status}
+                    </span>
+                    {activeCall.status === "connected" ? (
+                        <span className="chat-type">Длительность: {formatCallDuration(callElapsedSec)}</span>
+                    ) : null}
+                    <div className="chat-call-actions">
+                        {activeCall.direction === "incoming" && activeCall.status === "ringing" ? (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        getSocket()?.emit("call:accept", { callId: activeCall.callId });
+                                    }}
+                                >
+                                    Принять
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        getSocket()?.emit("call:decline", { callId: activeCall.callId, reason: "declined" });
+                                    }}
+                                >
+                                    Отклонить
+                                </button>
+                            </>
+                        ) : null}
+                        {activeCall.status === "initiated" || activeCall.status === "ringing" || activeCall.status === "connected" ? (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    getSocket()?.emit("call:end", { callId: activeCall.callId, reason: "hangup" });
+                                }}
+                            >
+                                Завершить
+                            </button>
+                        ) : null}
+                    </div>
+                </div>
+            ) : null}
+            {callOverlayError ? <div className="chat-call-error">{callOverlayError}</div> : null}
             {isSearchOpen ? (
                 <div className="chat-search">
                     <input

@@ -16,7 +16,7 @@ export default function AppSidebar({
     const [isAboutOpen, setIsAboutOpen] = useState(false);
     const [isContactsOpen, setIsContactsOpen] = useState(false);
     const [contactsQuery, setContactsQuery] = useState("");
-    const { contacts } = useContacts();
+    const { contacts } = useContacts(currentUser?.id)
     const navigate = useNavigate();
 
     const handleNightModeToggle = () => {

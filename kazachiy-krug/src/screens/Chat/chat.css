@@ -137,6 +137,35 @@
     color: var(--color-muted);
 }
 
+.chat-call-overlay {
+    display: grid;
+    gap: 6px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-light);
+    background: color-mix(in srgb, var(--chat-panel-bg) 85%, var(--bg-card));
+}
+
+.chat-call-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.chat-call-actions button {
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    background: var(--bg-main);
+    color: var(--color-primary);
+    padding: 6px 10px;
+    cursor: pointer;
+}
+
+.chat-call-error {
+    margin: 8px 16px 0;
+    color: #d13b3b;
+    font-weight: 600;
+}
+
 .chat-messages {
     flex: 1;
     padding: 12px;

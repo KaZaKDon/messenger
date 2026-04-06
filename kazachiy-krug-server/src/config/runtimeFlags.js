@@ -12,3 +12,8 @@ export const SOCKET_MEMORY_FALLBACK_ENABLED = parseBoolean(
     process.env.SOCKET_MEMORY_FALLBACK_ENABLED,
     false
 );
+
+export const CALL_MEMORY_FALLBACK_ENABLED = parseBoolean(
+    process.env.CALL_MEMORY_FALLBACK_ENABLED,
+    true
+);

@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { connectSocket } from "./socket";
 
-export function useContacts() {
+export function useContacts(currentUserId = null) {
     const [contacts, setContacts] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [loadingState, setLoadingState] = useState(Boolean(currentUserId));
 
     useEffect(() => {
+        if (!currentUserId) return undefined;
         const socket = connectSocket();
+        let isResolved = false;
 
         const requestUsers = () => {
             socket.emit("users:get");
@@ -15,11 +17,13 @@ export function useContacts() {
         const onUsersList = (users = []) => {
             const onlyContacts = users.filter((user) => !user?.isGroup);
             setContacts(onlyContacts);
-            setLoading(false);
+            setLoadingState(false);
+            isResolved = true;
         };
 
         const onUsersError = () => {
-            setLoading(false);
+            setLoadingState(false);
+            isResolved = true;
         };
 
         socket.on("users:list", onUsersList);
@@ -28,13 +32,22 @@ export function useContacts() {
         socket.on("auth:success", requestUsers);
         requestUsers();
 
+        const retryTimer = setInterval(() => {
+            if (isResolved) return;
+            requestUsers();
+        }, 1500);
+
         return () => {
+            clearInterval(retryTimer);
             socket.off("users:list", onUsersList);
             socket.off("users:error", onUsersError);
             socket.off("connect", requestUsers);
             socket.off("auth:success", requestUsers);
         };
-    }, []);
+    }, [currentUserId]);
 
-    return { contacts, loading };
+    return {
+        contacts: currentUserId ? contacts : [],
+        loading: currentUserId ? loadingState : false,
+    };
 }

@@ -210,6 +210,20 @@ export default function Chat({ currentUser }) {
         });
     };
 
+    const startCallFromChat = (type) => {
+        if (!resolvedChatId) return;
+        if (!activeChatUserId || activeChatUserId.startsWith("group-")) return;
+
+        const socket = getSocket();
+        if (!socket) return;
+
+        socket.emit("call:start", {
+            chatId: resolvedChatId,
+            type,
+            targetUserId: activeChatUserId,
+        });
+    };
+
     return (
         <div className="chat-main">
             <DialogList
@@ -254,6 +268,7 @@ export default function Chat({ currentUser }) {
                 onTypingStart={startTyping}
                 onTypingStop={stopTyping}
                 onLoadOlderMessages={loadOlderMessages}
+                onStartCall={startCallFromChat}
             />
 
         </div>

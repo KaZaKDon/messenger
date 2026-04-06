@@ -1,6 +1,23 @@
 import { useEffect } from "react";
 import { getSocket } from "../../../shared/socket";
 
+function formatCallNotice(eventName, payload = {}, currentUserId) {
+    const typeLabel = payload?.type === "video" ? "видеозвонок" : "аудиозвонок";
+
+    if (eventName === "call:incoming") return `Входящий ${typeLabel}`;
+    if (eventName === "call:ringing") return `Исходящий ${typeLabel}: звонит...`;
+    if (eventName === "call:accepted") return `Звонок принят (${typeLabel})`;
+    if (eventName === "call:declined") return `Звонок отклонён (${typeLabel})`;
+    if (eventName === "call:ended") {
+        if (payload?.endedReason === "timeout") return `${typeLabel}: пропущен`;
+        if (payload?.endedBy && payload.endedBy === currentUserId) return `${typeLabel}: завершён вами`;
+        if (payload?.endedBy) return `${typeLabel}: завершён собеседником`;
+        return `${typeLabel}: завершён`;
+    }
+
+    return "";
+}
+
 export function useChatSocket(
     dispatch,
     currentUser,
@@ -211,6 +228,47 @@ export function useChatSocket(
             socket.off("message:delivered", onDelivered);
             socket.off("message:read", onRead);
             socket.off("message:error", onMessageError);
+        };
+    }, [activeChatId, currentUser?.id, dispatch]);
+
+    // --- CALL LIFECYCLE NOTICES ---
+    useEffect(() => {
+        const socket = getSocket();
+        if (!socket) return;
+        if (!currentUser?.id || !activeChatId) return;
+
+        const emitNoticeIfActiveChat = (eventName) => (payload = {}) => {
+            if (payload?.chatId !== activeChatId) return;
+            const text = formatCallNotice(eventName, payload, currentUser.id);
+            if (!text) return;
+
+            dispatch({
+                type: "CHAT_HISTORY_NOTICE",
+                payload: {
+                    chatId: activeChatId,
+                    message: text,
+                },
+            });
+        };
+
+        const onIncoming = emitNoticeIfActiveChat("call:incoming");
+        const onRinging = emitNoticeIfActiveChat("call:ringing");
+        const onAccepted = emitNoticeIfActiveChat("call:accepted");
+        const onDeclined = emitNoticeIfActiveChat("call:declined");
+        const onEnded = emitNoticeIfActiveChat("call:ended");
+
+        socket.on("call:incoming", onIncoming);
+        socket.on("call:ringing", onRinging);
+        socket.on("call:accepted", onAccepted);
+        socket.on("call:declined", onDeclined);
+        socket.on("call:ended", onEnded);
+
+        return () => {
+            socket.off("call:incoming", onIncoming);
+            socket.off("call:ringing", onRinging);
+            socket.off("call:accepted", onAccepted);
+            socket.off("call:declined", onDeclined);
+            socket.off("call:ended", onEnded);
         };
     }, [activeChatId, currentUser?.id, dispatch]);
 

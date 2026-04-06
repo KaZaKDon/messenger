@@ -1,0 +1,74 @@
+.calls-page {
+    min-height: 100%;
+    padding: 16px;
+}
+
+.calls-header {
+    margin-bottom: 12px;
+}
+
+.calls-panel {
+    display: grid;
+    gap: 10px;
+    border: 1px solid var(--border-light);
+    border-radius: 14px;
+    background: var(--bg-card);
+    padding: 14px;
+}
+
+.calls-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.calls-toolbar-actions,
+.calls-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.calls-toolbar-actions button,
+.calls-actions button,
+.calls-list-item button {
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    background: var(--bg-main);
+    color: var(--color-primary);
+    padding: 6px 10px;
+    cursor: pointer;
+}
+
+.calls-list-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    padding: 10px;
+    background: var(--bg-main);
+}
+
+.calls-meta {
+    color: var(--color-muted);
+    font-size: 13px;
+    margin-top: 3px;
+}
+
+.calls-active-card {
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    padding: 12px;
+    background: var(--bg-main);
+    display: grid;
+    gap: 8px;
+}
+
+.calls-error {
+    color: #d13b3b;
+    font-weight: 600;
+}

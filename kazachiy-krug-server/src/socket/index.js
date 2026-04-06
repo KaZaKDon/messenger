@@ -1,6 +1,7 @@
 import { authSocket } from "./auth.socket.js";
 import { chatSocket } from "./chat.socket.js";
 import { messageSocket } from "./message.socket.js";
+import { callSocket } from "./call.socket.js";
 import { onlineUsers } from "../store/onlineUsers.js";
 
 export function initSocket(io) {
@@ -12,6 +13,7 @@ export function initSocket(io) {
         authSocket(io, socket);
         chatSocket(io, socket);
         messageSocket(io, socket);
+        callSocket(io, socket);
 
         socket.on("disconnect", () => {
             if (socket.data.userId) {

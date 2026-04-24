@@ -29,6 +29,35 @@
     display: none;
 }
 
+.incoming-call-modal {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 250;
+    min-width: 280px;
+    display: grid;
+    gap: 8px;
+    padding: 14px;
+    border-radius: 14px;
+    border: 1px solid var(--border-light);
+    background: var(--bg-card);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+}
+
+.incoming-call-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.incoming-call-actions button {
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    padding: 8px 12px;
+    background: var(--bg-main);
+    color: var(--color-primary);
+    cursor: pointer;
+}
+
 @media (max-width: 1199px) {
     .app-frame {
         min-height: 100dvh;

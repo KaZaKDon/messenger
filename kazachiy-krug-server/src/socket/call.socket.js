@@ -5,7 +5,10 @@ import { CALL_MEMORY_FALLBACK_ENABLED } from "../config/runtimeFlags.js";
 import { getCallById, listCallsByChatId, upsertCall } from "../store/calls.js";
 import { getOrCreatePrivateChat } from "../store/chatHelpers.js";
 
-const RING_TIMEOUT_MS = 30_000;
+const RING_TIMEOUT_MS = 40_000;
+const STALE_CALL_GRACE_MS = 5_000;
+const SIGNAL_RATE_LIMIT_WINDOW_MS = 1_000;
+const SIGNAL_RATE_LIMIT_MAX = 60;
 const ACTIVE_STATUSES = new Set(["initiated", "ringing", "connected"]);
 const CALL_TYPES = new Set(["audio", "video"]);
 const SIGNAL_KINDS = new Set(["offer", "answer", "ice-candidate"]);
@@ -21,6 +24,7 @@ function emitCallError(socket, payload = {}) {
         callId: payload.callId ?? null,
         chatId: payload.chatId ?? null,
         retryable: Boolean(payload.retryable),
+        activeCall: payload.activeCall ?? null,
     });
 }
 
@@ -95,6 +99,12 @@ function hasActiveCallInChatMemory(chatId) {
     return listCallsByChatId(chatId).some((call) => ACTIVE_STATUSES.has(call.status));
 }
 
+function findActiveCallInChatMemory(chatId) {
+    return listCallsByChatId(chatId)
+        .filter((call) => ACTIVE_STATUSES.has(call.status))
+        .sort((a, b) => new Date(b.updatedAt ?? b.createdAt ?? 0).getTime() - new Date(a.updatedAt ?? a.createdAt ?? 0).getTime())[0] ?? null;
+}
+
 async function hasActiveCallInChatDb(chatId) {
     const active = await prisma.callSession.findFirst({
         where: {
@@ -106,6 +116,28 @@ async function hasActiveCallInChatDb(chatId) {
         select: { id: true },
     });
     return Boolean(active?.id);
+}
+
+async function findActiveCallInChatDb(chatId) {
+    return prisma.callSession.findFirst({
+        where: {
+            chatId,
+            status: {
+                in: [...ACTIVE_STATUSES],
+            },
+        },
+        orderBy: {
+            updatedAt: "desc",
+        },
+    });
+}
+
+function isStaleRingingCall(call, nowMs = Date.now()) {
+    if (!call) return false;
+    if (call.status !== "initiated" && call.status !== "ringing") return false;
+    const updatedAtMs = new Date(call.updatedAt ?? call.createdAt ?? 0).getTime();
+    if (!Number.isFinite(updatedAtMs) || updatedAtMs <= 0) return false;
+    return nowMs - updatedAtMs > RING_TIMEOUT_MS + STALE_CALL_GRACE_MS;
 }
 
 async function createCallDb({ chatId, initiatorId, type }) {
@@ -186,16 +218,33 @@ function durationSecFrom(startedAt, endedAt) {
 
 function scheduleMissedTimeout({ io, callId, memberIds }) {
     setTimeout(async () => {
-        const call = getCallById(callId);
-        if (!call || call.status !== "ringing") return;
-
+        let next = null;
         const endedAt = getNowIso();
-        const next = updateCallMemory(callId, {
-            status: "missed",
-            endedReason: "timeout",
-            endedAt,
-            durationSec: 0,
-        });
+
+        try {
+            const call = await findCallDb(callId);
+            if (call && call.status === "ringing") {
+                next = await updateCallDb(callId, {
+                    status: "missed",
+                    endedReason: "timeout",
+                    endedAt,
+                    durationSec: 0,
+                });
+            }
+        } catch {
+            if (!CALL_MEMORY_FALLBACK_ENABLED) return;
+        }
+
+        if (!next) {
+            const memoryCall = getCallById(callId);
+            if (!memoryCall || memoryCall.status !== "ringing") return;
+            next = updateCallMemory(callId, {
+                status: "missed",
+                endedReason: "timeout",
+                endedAt,
+                durationSec: 0,
+            });
+        }
         if (!next) return;
 
         emitToMembers(io, memberIds, "call:ended", {
@@ -207,6 +256,21 @@ function scheduleMissedTimeout({ io, callId, memberIds }) {
 }
 
 export function callSocket(io, socket) {
+    const signalRateByCall = new Map();
+
+    function canSendSignal(callId) {
+        const now = Date.now();
+        const prev = signalRateByCall.get(callId) ?? [];
+        const next = prev.filter((ts) => now - ts < SIGNAL_RATE_LIMIT_WINDOW_MS);
+        if (next.length >= SIGNAL_RATE_LIMIT_MAX) {
+            signalRateByCall.set(callId, next);
+            return false;
+        }
+        next.push(now);
+        signalRateByCall.set(callId, next);
+        return true;
+    }
+
     socket.on("call:start", async ({ chatId, type, targetUserId } = {}) => {
         if (!socket.data.isAuth) {
             emitCallError(socket, { code: "UNAUTHORIZED", message: "Authorization required", chatId });
@@ -239,12 +303,22 @@ export function callSocket(io, socket) {
                 return;
             }
 
-            if (await hasActiveCallInChatDb(chatId)) {
+            const activeCall = await findActiveCallInChatDb(chatId);
+            if (activeCall && isStaleRingingCall(activeCall)) {
+                await updateCallDb(activeCall.id, {
+                    status: "missed",
+                    endedReason: "timeout",
+                    endedAt: getNowIso(),
+                    durationSec: 0,
+                });
+            } else if (activeCall || await hasActiveCallInChatDb(chatId)) {
                 emitCallError(socket, {
                     code: "CALL_ALREADY_EXISTS_ACTIVE",
                     message: "There is already an active call in this chat",
+                    callId: activeCall.id,
                     chatId,
                     retryable: true,
+                    activeCall: serializeCall(activeCall),
                 });
                 return;
             }
@@ -277,12 +351,15 @@ export function callSocket(io, socket) {
                 });
                 return;
             }
-            if (hasActiveCallInChatMemory(chatId)) {
+            const activeCallMemory = findActiveCallInChatMemory(chatId);
+            if (activeCallMemory || hasActiveCallInChatMemory(chatId)) {
                 emitCallError(socket, {
                     code: "CALL_ALREADY_EXISTS_ACTIVE",
                     message: "There is already an active call in this chat",
+                    callId: activeCallMemory?.id ?? null,
                     chatId,
                     retryable: true,
+                    activeCall: activeCallMemory ? serializeCall(activeCallMemory) : null,
                 });
                 return;
             }
@@ -315,9 +392,7 @@ export function callSocket(io, socket) {
             }
         }
 
-        if (CALL_MEMORY_FALLBACK_ENABLED && getCallById(call.id)) {
-            scheduleMissedTimeout({ io, callId: call.id, memberIds });
-        }
+        scheduleMissedTimeout({ io, callId: call.id, memberIds });
     });
 
     socket.on("call:accept", async ({ callId } = {}) => {
@@ -597,6 +672,16 @@ export function callSocket(io, socket) {
                 message: "candidate payload is required",
                 callId,
                 chatId,
+            });
+            return;
+        }
+        if (!canSendSignal(callId)) {
+            emitCallError(socket, {
+                code: "CALL_SIGNAL_RATE_LIMIT",
+                message: "Too many signaling packets. Please slow down.",
+                callId,
+                chatId,
+                retryable: true,
             });
             return;
         }

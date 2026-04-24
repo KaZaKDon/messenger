@@ -47,6 +47,13 @@ function normalizeHistoryStatus(session) {
     return "completed";
 }
 
+function mapCallErrorMessage(code, message) {
+    if (code === "CALL_ALREADY_EXISTS_ACTIVE") {
+        return "В этом чате уже есть активный звонок";
+    }
+    return message ?? "Ошибка звонка";
+}
+
 export default function Calls({ currentUser }) {
     const navigate = useNavigate();
     const { contacts, loading } = useContacts(currentUser?.id);
@@ -180,7 +187,7 @@ export default function Calls({ currentUser }) {
                 const isHistoryLookup = contacts.some((item) => buildPrivateRoomId(currentUser.id, item.id) === chatId);
                 if (isHistoryLookup) return;
             }
-            setCallError(message ?? "Ошибка звонка");
+            setCallError(mapCallErrorMessage(code, message));
         };
 
         const onCallHistory = ({ chatId, items = [] } = {}) => {
@@ -291,6 +298,7 @@ export default function Calls({ currentUser }) {
                     const contactName = contactsById[item.contactId]?.name ?? item.contactName ?? "Неизвестный";
                     const callEmoji = item.type === "video" ? "🎥" : "📞";
                     const statusLabel = item.status === "missed" ? "Пропущен" : "Завершён";
+                    const hasContactId = Boolean(item.contactId);
 
                     return (
                         <div key={item.id} className="calls-list-item">
@@ -302,7 +310,11 @@ export default function Calls({ currentUser }) {
                             </div>
                             <button
                                 type="button"
-                                onClick={() => navigate(`/chat?user=${encodeURIComponent(item.contactId)}`)}
+                                onClick={() => {
+                                    if (!hasContactId) return;
+                                    navigate(`/chat?user=${encodeURIComponent(item.contactId)}`);
+                                }}
+                                disabled={!hasContactId}
                             >
                                 Открыть чат
                             </button>

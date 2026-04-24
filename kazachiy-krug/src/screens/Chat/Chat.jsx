@@ -4,7 +4,7 @@ import { chatReducer, initialState } from "./chatReducer";
 import { useChatSocket } from "./hooks/useChatSocket";
 import DialogList from "./components/DialogList";
 import ChatWindow from "./components/ChatWindow";
-import { getSocket } from "../../shared/socket";
+import { connectSocket, getSocket } from "../../shared/socket";
 
 import "./chat.css";
 import "../../styles/variables.css";
@@ -214,7 +214,7 @@ export default function Chat({ currentUser }) {
         if (!resolvedChatId) return;
         if (!activeChatUserId || activeChatUserId.startsWith("group-")) return;
 
-        const socket = getSocket();
+        const socket = connectSocket();
         if (!socket) return;
 
         socket.emit("call:start", {

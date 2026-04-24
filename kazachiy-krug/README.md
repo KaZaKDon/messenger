@@ -14,3 +14,17 @@ The React Compiler is not enabled on this template because of its impact on dev 
 ## Expanding the ESLint configuration
 
 If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+
+## WebRTC call configuration
+
+For stable 1:1 calls outside local networks, configure ICE servers (STUN/TURN) via:
+
+```bash
+VITE_WEBRTC_ICE_SERVERS='[
+  {"urls":"stun:stun.l.google.com:19302"},
+  {"urls":"turn:turn.example.com:3478","username":"demo","credential":"demo-secret"}
+]'
+```
+
+- If this variable is missing or invalid JSON, the app falls back to default STUN.
+- If only STUN is configured and TURN is missing, calls may fail in strict NAT/mobile/corporate networks.

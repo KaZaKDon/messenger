@@ -28,3 +28,38 @@ VITE_WEBRTC_ICE_SERVERS='[
 
 - If this variable is missing or invalid JSON, the app falls back to default STUN.
 - If only STUN is configured and TURN is missing, calls may fail in strict NAT/mobile/corporate networks.
+
+# messenger
+messenger
+
+Monorepo for the Kazachiy Krug messenger prototype.
+
+## Projects
+
+- `kazachiy-krug/` — React + Vite client.
+- `kazachiy-krug-server/` — Express + Socket.IO + Prisma backend.
+
+## Local infrastructure
+
+The backend uses PostgreSQL through Prisma. A local PostgreSQL service is provided in `docker-compose.yml`.
+
+```bash
+docker compose up -d postgres
+```
+
+Then configure the backend environment and apply migrations/seed data:
+
+```bash
+cd kazachiy-krug-server
+cp .env.example .env
+npm run db:setup:full
+npm run dev
+```
+
+Configure the client environment in another terminal:
+
+```bash
+cd kazachiy-krug
+cp .env.example .env
+npm run dev
+```

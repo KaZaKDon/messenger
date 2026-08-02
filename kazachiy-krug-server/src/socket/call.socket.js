@@ -217,7 +217,7 @@ function durationSecFrom(startedAt, endedAt) {
 }
 
 function scheduleMissedTimeout({ io, callId, memberIds }) {
-    setTimeout(async () => {
+    const timeout = setTimeout(async () => {
         let next = null;
         const endedAt = getNowIso();
 
@@ -253,6 +253,8 @@ function scheduleMissedTimeout({ io, callId, memberIds }) {
             endedBy: null,
         });
     }, RING_TIMEOUT_MS);
+
+    timeout?.unref?.();
 }
 
 export function callSocket(io, socket) {

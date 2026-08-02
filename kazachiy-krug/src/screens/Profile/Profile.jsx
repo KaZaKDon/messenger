@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { API_BASE_URL } from "../../shared/config";
 import "./Profile.css";
-
-const API_BASE = "http://localhost:3000";
 
 const FIELD_CONFIG = {
     phone: { label: "Телефон", placeholder: "+7 900 700 00 00" },
@@ -34,7 +33,7 @@ export default function Profile({ currentUser }) {
             if (!userId) return;
 
             try {
-                const response = await fetch(`${API_BASE}/me?userId=${encodeURIComponent(userId)}`);
+                const response = await fetch(`${API_BASE_URL}/me?userId=${encodeURIComponent(userId)}`);
 
                 if (!response.ok) {
                     throw new Error(`Failed to load profile (${response.status})`);
@@ -82,7 +81,7 @@ export default function Profile({ currentUser }) {
         setDetails(nextDetails);
 
         try {
-            const response = await fetch(`${API_BASE}/me`, {
+            const response = await fetch(`${API_BASE_URL}/me`, {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",

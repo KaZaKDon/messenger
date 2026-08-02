@@ -212,6 +212,101 @@ function normalizeMessagePayload(message) {
     };
 }
 
+
+function isUnsupportedMessageMediaSchemaError(error) {
+    const message = String(error?.message ?? error ?? "");
+
+    return (
+        /Unknown (argument|field) [`']?(type|attachments)[`']?/i.test(message) ||
+        /Unknown arg [`']?(type|attachments)[`']?/i.test(message)
+    );
+}
+
+function getLegacyMediaUrl(normalizedMessage) {
+    if (typeof normalizedMessage?.imageUrl === "string" && normalizedMessage.imageUrl.trim()) {
+        return normalizedMessage.imageUrl;
+    }
+
+    const firstAttachment = normalizedMessage?.attachments?.find((attachment) => {
+        return typeof attachment?.url === "string" && attachment.url.trim();
+    });
+    if (firstAttachment) return firstAttachment.url.trim();
+
+    return null;
+}
+
+function getLegacyImageUrlsValue(normalizedMessage) {
+    if (Array.isArray(normalizedMessage?.imageUrls) && normalizedMessage.imageUrls.length > 0) {
+        return normalizedMessage.imageUrls;
+    }
+
+    const imageUrls = normalizedMessage?.attachments
+        ?.filter((attachment) => attachment.mediaType === "image" && attachment.url)
+        .map((attachment) => attachment.url) ?? [];
+
+    return imageUrls.length > 1 ? imageUrls : null;
+}
+
+async function createMessageDb({ chatId, socket, message, normalizedMessage }) {
+    const baseData = {
+        ...(typeof message?.id === "string" && message.id ? {
+            id: message.id
+        } : {}),
+        chatId,
+        senderId: socket.data.userId,
+        text: normalizedMessage.text,
+        imageUrl: normalizedMessage.imageUrl,
+        imageUrls: normalizedMessage.imageUrls,
+        status: "sent",
+    };
+
+    try {
+        const created = await prisma.message.create({
+            data: {
+                ...baseData,
+                type: normalizedMessage.type,
+                attachments: {
+                    create: normalizedMessage.attachments,
+                },
+            },
+            include: {
+                attachments: true,
+            },
+        });
+
+        return { created, usedLegacySchema: false };
+    } catch (error) {
+        if (!isUnsupportedMessageMediaSchemaError(error)) throw error;
+
+        const created = await prisma.message.create({
+            data: {
+                ...baseData,
+                imageUrl: getLegacyMediaUrl(normalizedMessage),
+                imageUrls: getLegacyImageUrlsValue(normalizedMessage),
+            },
+        });
+
+        return { created, usedLegacySchema: true };
+    }
+}
+
+function buildServerMessage({ message, normalizedMessage, created, socket, usedLegacySchema }) {
+    return {
+        ...message,
+        id: created.id,
+        chatId: created.chatId,
+        senderId: created.senderId,
+        senderName: socket.data.userName,
+        text: created.text,
+        type: created.type ?? normalizedMessage.type,
+        imageUrl: created.imageUrl ?? (usedLegacySchema ? getLegacyMediaUrl(normalizedMessage) : null),
+        imageUrls: created.imageUrls ?? (usedLegacySchema ? getLegacyImageUrlsValue(normalizedMessage) : null),
+        attachments: created.attachments ?? (usedLegacySchema ? normalizedMessage.attachments : []),
+        status: created.status,
+        createdAt: created.createdAt instanceof Date ? created.createdAt.getTime() : created.createdAt,
+    };
+}
+
 function runMessageSendMemory(io, socket, message) {
     const chatId = message?.chatId;
     if (!chatId) return;
@@ -336,41 +431,20 @@ export function messageSocket(io, socket) {
                 }
             }
             const normalizedMessage = normalizeMessagePayload(message);
-            const created = await prisma.message.create({
-                data: {
-                    ...(typeof message?.id === "string" && message.id ? {
-                        id: message.id
-                    } : {}),
-                    chatId,
-                    senderId: socket.data.userId,
-                    text: normalizedMessage.text,
-                    type: normalizedMessage.type,
-                    imageUrl: normalizedMessage.imageUrl,
-                    imageUrls: normalizedMessage.imageUrls,
-                    attachments: {
-                        create: normalizedMessage.attachments,
-                    },
-                    status: "sent",
-                },
-                include: {
-                    attachments: true,
-                },
+            const { created, usedLegacySchema } = await createMessageDb({
+                chatId,
+                socket,
+                message,
+                normalizedMessage,
             });
 
-            const serverMessage = {
-                ...message,
-                id: created.id,
-                chatId: created.chatId,
-                senderId: created.senderId,
-                senderName: socket.data.userName,
-                text: created.text,
-                type: created.type,
-                imageUrl: created.imageUrl,
-                imageUrls: created.imageUrls,
-                attachments: created.attachments,
-                status: created.status,
-                createdAt: created.createdAt.getTime(),
-            };
+            const serverMessage = buildServerMessage({
+                message,
+                normalizedMessage,
+                created,
+                socket,
+                usedLegacySchema,
+            });
 
             if (chats[chatId]) {
                 chats[chatId].messages.push(serverMessage);

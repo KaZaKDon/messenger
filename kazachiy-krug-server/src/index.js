@@ -3,7 +3,7 @@ import { Server } from "socket.io";
 import app from "./app.js";
 import { initSocket } from "./socket/index.js";
 
-const PORT = 3000;
+const PORT = Number.parseInt(process.env.PORT ?? "3000", 10);
 
 const server = http.createServer(app);
 

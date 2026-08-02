@@ -536,3 +536,131 @@ test("message:send allows publish when publishUserIds is empty array and mode=ch
         prisma.message.create = originalMessageCreate;
     }
 });
+
+test("message:send falls back to legacy message schema when media fields are unavailable", async () => {
+    const socket = createFakeSocket("user-1");
+    messageSocket(createFakeIo(), socket);
+
+    const originalChatFindFirst = prisma.chat.findFirst;
+    const originalMessageCreate = prisma.message.create;
+
+    const createPayloads = [];
+
+    prisma.chat.findFirst = async () => ({
+        id: "room-user-1-user-4",
+        type: "private",
+        members: [{ userId: "user-1" }, { userId: "user-4" }],
+    });
+    prisma.message.create = async (payload) => {
+        createPayloads.push(payload);
+
+        if (payload.data.type) {
+            throw new Error("Unknown argument `type`. Did you mean `text`?");
+        }
+
+        return {
+            id: payload.data.id,
+            chatId: payload.data.chatId,
+            senderId: payload.data.senderId,
+            text: payload.data.text,
+            imageUrl: payload.data.imageUrl,
+            imageUrls: payload.data.imageUrls,
+            status: "sent",
+            createdAt: new Date("2026-05-11T12:00:00.000Z"),
+        };
+    };
+
+    try {
+        const handler = socket.handlers.get("message:send");
+        assert.ok(handler, "message:send handler should be registered");
+
+        await handler({
+            id: "m-legacy",
+            chatId: "room-user-1-user-4",
+            text: "ппппп",
+            type: "text",
+        });
+
+        assert.equal(createPayloads.length, 2, "message create should be retried without media fields");
+        assert.equal(createPayloads[0].data.type, "text");
+        assert.equal(createPayloads[1].data.type, undefined);
+        assert.equal(createPayloads[1].data.attachments, undefined);
+
+        const newEvent = socket.emitted.find((item) => item.event === "message:new");
+        assert.ok(newEvent, "message:new should be emitted after legacy create fallback");
+        assert.equal(newEvent.payload.id, "m-legacy");
+        assert.equal(newEvent.payload.type, "text");
+
+        const deliveredEvent = socket.emitted.find((item) => item.event === "message:delivered");
+        assert.ok(deliveredEvent, "message:delivered should be emitted after legacy create fallback");
+        assert.equal(deliveredEvent.payload.messageId, "m-legacy");
+    } finally {
+        prisma.chat.findFirst = originalChatFindFirst;
+        prisma.message.create = originalMessageCreate;
+    }
+});
+
+test("message:send persists voice URL in legacy message schema", async () => {
+    const socket = createFakeSocket("user-1");
+    messageSocket(createFakeIo(), socket);
+
+    const originalChatFindFirst = prisma.chat.findFirst;
+    const originalMessageCreate = prisma.message.create;
+
+    const createPayloads = [];
+
+    prisma.chat.findFirst = async () => ({
+        id: "room-user-1-user-4",
+        type: "private",
+        members: [{ userId: "user-1" }, { userId: "user-4" }],
+    });
+    prisma.message.create = async (payload) => {
+        createPayloads.push(payload);
+
+        if (payload.data.attachments) {
+            throw new Error("Unknown argument `attachments`.");
+        }
+
+        return {
+            id: payload.data.id,
+            chatId: payload.data.chatId,
+            senderId: payload.data.senderId,
+            text: payload.data.text,
+            imageUrl: payload.data.imageUrl,
+            imageUrls: payload.data.imageUrls,
+            status: "sent",
+            createdAt: new Date("2026-05-11T12:00:00.000Z"),
+        };
+    };
+
+    try {
+        const handler = socket.handlers.get("message:send");
+        assert.ok(handler, "message:send handler should be registered");
+
+        await handler({
+            id: "m-legacy-voice",
+            chatId: "room-user-1-user-4",
+            text: "",
+            type: "media",
+            attachments: [
+                {
+                    mediaType: "audio",
+                    url: "http://localhost:3000/uploads/voice.webm",
+                    mimeType: "audio/webm",
+                    durationMs: 1200,
+                },
+            ],
+        });
+
+        assert.equal(createPayloads.length, 2, "message create should retry legacy schema");
+        assert.equal(createPayloads[1].data.imageUrl, "http://localhost:3000/uploads/voice.webm");
+
+        const newEvent = socket.emitted.find((item) => item.event === "message:new");
+        assert.ok(newEvent, "message:new should be emitted after legacy voice fallback");
+        assert.equal(newEvent.payload.attachments[0].mediaType, "audio");
+        assert.equal(newEvent.payload.attachments[0].url, "http://localhost:3000/uploads/voice.webm");
+    } finally {
+        prisma.chat.findFirst = originalChatFindFirst;
+        prisma.message.create = originalMessageCreate;
+    }
+});

@@ -163,11 +163,15 @@ export function useChatSocket(
     useEffect(() => {
         const socket = getSocket();
         if (!socket) return;
-        if (!currentUser?.id || !activeChatId) return;
+        if (!currentUser?.id) return;
 
-        socket.emit("join:chat", { chatId: activeChatId });
+        if (activeChatId) {
+            socket.emit("join:chat", { chatId: activeChatId });
+        }
 
         const onMessage = (message) => {
+            if (!message?.chatId || !message?.id) return;
+
             dispatch({
                 type: "RECEIVE_MESSAGE",
                 payload: {

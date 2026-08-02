@@ -8,8 +8,7 @@ import {
 import AnnouncementComposer from "./AnnouncementComposer";
 import AnnouncementCard from "./AnnouncementCard";
 import { connectSocket, getSocket } from "/src/shared/socket";
-
-const API_BASE = "http://localhost:3000";
+import { API_BASE_URL } from "../../../shared/config";
 
 const VOICE_MIME_CANDIDATES = [
     "audio/webm;codecs=opus",
@@ -618,7 +617,7 @@ export default function ChatWindow({
 
         setUploading(true);
         try {
-            const res = await fetch(`${API_BASE}/upload`, {
+            const res = await fetch(`${API_BASE_URL}/upload`, {
                 method: "POST",
                 body: fd,
             });
@@ -644,7 +643,7 @@ export default function ChatWindow({
 
         setUploading(true);
         try {
-            const res = await fetch(`${API_BASE}/upload`, {
+            const res = await fetch(`${API_BASE_URL}/upload`, {
                 method: "POST",
                 body: fd,
             });

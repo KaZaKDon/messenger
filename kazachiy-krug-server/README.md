@@ -18,16 +18,31 @@ Backend for the Messenger monorepo (`Express + Socket.IO + Prisma`).
    ```bash
    npm ci
    ```
-2. Create `.env` and set `DATABASE_URL`.
-3. Generate Prisma client:
+2. Create `.env` from the example and set `DATABASE_URL` if your database is not local Docker:
+   ```bash
+   cp .env.example .env
+   ```
+3. Optional: start local PostgreSQL from the repository root:
+   ```bash
+   docker compose up -d postgres
+   ```
+4. Generate Prisma client:
    ```bash
    npm run prisma:generate
    ```
-4. Apply migrations and seed data:
+5. Apply migrations and seed data:
    ```bash
    npm run db:setup
    ```
-5. Start development server:
+6. Start development server:
    ```bash
    npm run dev
    ```
+## Environment
+
+See `.env.example` for supported variables:
+
+- `DATABASE_URL` — PostgreSQL connection string used by Prisma.
+- `PORT` — HTTP and Socket.IO port, defaults to `3000`.
+- `SOCKET_MEMORY_FALLBACK_ENABLED` — local/dev fallback for socket data when DB is unavailable.
+- `CALL_MEMORY_FALLBACK_ENABLED` — local/dev fallback for call state when DB is unavailable.

@@ -56,6 +56,15 @@ function isGroupId(id) {
     return typeof id === "string" && id.startsWith("group-");
 }
 
+function isUnsupportedMessageMediaSchemaError(error) {
+    const message = String(error?.message ?? error ?? "");
+
+    return (
+        /Unknown (argument|field) [`']?(type|attachments)[`']?/i.test(message) ||
+        /Unknown arg [`']?(type|attachments)[`']?/i.test(message)
+    );
+}
+
 async function getGroupRuleDb(chatId) {
     return prisma.groupRule.findUnique({
         where: { chatId },
@@ -103,59 +112,125 @@ function mapMembersInfoFromUsers(memberIds) {
         }));
 }
 
-function mapDbMessages(messages = []) {
-    return messages.map((message) => ({
-        id: message.id,
-        chatId: message.chatId,
-        senderId: message.senderId,
-        text: message.text,
-        type: message.type,
-        imageUrl: message.imageUrl,
-        imageUrls: message.imageUrls,
-        attachments: message.attachments ?? [],
-        status: message.status,
-        createdAt: message.createdAt instanceof Date ? message.createdAt.getTime() : message.createdAt,
+const AUDIO_URL_PATTERN = /\.(?:ogg|oga|mp3|wav|m4a|webm)(?:[?#].*)?$/i;
+const IMAGE_URL_PATTERN = /\.(?:jpg|jpeg|png|webp|gif)(?:[?#].*)?$/i;
+
+function normalizeLegacyUrls(message = {}) {
+    return [
+        typeof message.imageUrl === "string" ? message.imageUrl : null,
+        ...(Array.isArray(message.imageUrls) ? message.imageUrls : []),
+    ]
+        .filter((url) => typeof url === "string")
+        .map((url) => url.trim())
+        .filter(Boolean);
+}
+
+function getLegacyAttachmentMediaType(url) {
+    if (AUDIO_URL_PATTERN.test(url)) return "audio";
+    if (IMAGE_URL_PATTERN.test(url)) return "image";
+    return "file";
+}
+
+function mapLegacyAttachments(message = {}) {
+    return normalizeLegacyUrls(message).map((url, index) => ({
+        id: `${message.id ?? "legacy"}-legacy-${index}`,
+        mediaType: getLegacyAttachmentMediaType(url),
+        url,
+        mimeType: null,
+        sizeBytes: null,
+        durationMs: null,
+        waveform: null,
+        width: null,
+        height: null,
     }));
+}
+
+function mapDbMessages(messages = []) {
+    return messages.map((message) => {
+        const attachments = message.attachments?.length
+            ? message.attachments
+            : mapLegacyAttachments(message);
+
+        return {
+            id: message.id,
+            chatId: message.chatId,
+            senderId: message.senderId,
+            text: message.text,
+            type: message.type ?? (attachments.length ? "media" : "text"),
+            imageUrl: message.imageUrl,
+            imageUrls: message.imageUrls,
+            attachments,
+            status: message.status,
+            createdAt: message.createdAt instanceof Date ? message.createdAt.getTime() : message.createdAt,
+        };
+    });
 }
 
 async function getChatMessagesPageDb(chatId, beforeCreatedAt = null, pageSize = HISTORY_PAGE_SIZE) {
     const cursor = normalizeCursor(beforeCreatedAt);
 
-    const messages = await prisma.message.findMany({
-        where: {
-            chatId,
-            ...(cursor ? { createdAt: { lt: cursor } } : {}),
-        },
-        orderBy: {
-            createdAt: "desc",
-        },
-        take: pageSize + 1,
-        select: {
-            id: true,
-            chatId: true,
-            senderId: true,
-            text: true,
-            type: true,
-            imageUrl: true,
-            imageUrls: true,
-            attachments: {
-                select: {
-                    id: true,
-                    mediaType: true,
-                    url: true,
-                    mimeType: true,
-                    sizeBytes: true,
-                    durationMs: true,
-                    waveform: true,
-                    width: true,
-                    height: true,
-                },
-            },
+    let messages;
 
-            status: true,
-            createdAt: true,
-        },
-    });
+    try {
+        messages = await prisma.message.findMany({
+            where: {
+                chatId,
+                ...(cursor ? { createdAt: { lt: cursor } } : {}),
+            },
+            orderBy: {
+                createdAt: "desc",
+            },
+            take: pageSize + 1,
+            select: {
+                id: true,
+                chatId: true,
+                senderId: true,
+                text: true,
+                type: true,
+                imageUrl: true,
+                imageUrls: true,
+                attachments: {
+                    select: {
+                        id: true,
+                        mediaType: true,
+                        url: true,
+                        mimeType: true,
+                        sizeBytes: true,
+                        durationMs: true,
+                        waveform: true,
+                        width: true,
+                        height: true,
+                    },
+                },
+
+                status: true,
+                createdAt: true,
+            },
+        });
+    } catch (error) {
+        if (!isUnsupportedMessageMediaSchemaError(error)) throw error;
+        
+        messages = await prisma.message.findMany({
+            where: {
+                chatId,
+                ...(cursor ? { createdAt: { lt: cursor } } : {}),
+            },
+            orderBy: {
+                createdAt: "desc",
+            },
+            take: pageSize + 1,
+            select: {
+                id: true,
+                chatId: true,
+                senderId: true,
+                text: true,
+                imageUrl: true,
+                imageUrls: true,
+                status: true,
+                createdAt: true,
+            },
+        });
+    }
 
     const hasMoreHistory = messages.length > pageSize;
     const page = hasMoreHistory ? messages.slice(0, pageSize) : messages;

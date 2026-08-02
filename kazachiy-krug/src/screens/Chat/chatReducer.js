@@ -28,13 +28,90 @@ function ensureChat(state, chatId) {
     };
 }
 
+const MESSAGE_STATUS_RANK = {
+    sent: 1,
+    delivered: 2,
+    read: 3,
+};
+
+function resolveMessageStatus(currentStatus, nextStatus) {
+    if (!nextStatus) return currentStatus;
+    if (!currentStatus) return nextStatus;
+
+    const currentRank = MESSAGE_STATUS_RANK[currentStatus] ?? 0;
+    const nextRank = MESSAGE_STATUS_RANK[nextStatus] ?? 0;
+
+    return nextRank >= currentRank ? nextStatus : currentStatus;
+}
+
+function hasItems(value) {
+    return Array.isArray(value) && value.length > 0;
+}
+
+function hasValue(value) {
+    return value !== undefined && value !== null;
+}
+
+function mergeMessage(existingMessage, nextMessage) {
+    const merged = {
+        ...existingMessage,
+        ...nextMessage,
+        status: resolveMessageStatus(existingMessage.status, nextMessage.status),
+    };
+
+    if (hasItems(existingMessage.attachments) && !hasItems(nextMessage.attachments)) {
+        merged.attachments = existingMessage.attachments;
+    }
+
+    if (hasItems(existingMessage.imageUrls) && !hasItems(nextMessage.imageUrls)) {
+        merged.imageUrls = existingMessage.imageUrls;
+    }
+
+    if (hasValue(existingMessage.imageUrl) && !hasValue(nextMessage.imageUrl)) {
+        merged.imageUrl = existingMessage.imageUrl;
+    }
+
+    if (hasValue(existingMessage.type) && !hasValue(nextMessage.type)) {
+        merged.type = existingMessage.type;
+    }
+
+    return merged;
+}
+
+function mergeMessages(existingMessages = [], nextMessages = []) {
+    const byId = new Map();
+
+    for (const message of existingMessages) {
+        if (!message?.id) continue;
+        byId.set(message.id, message);
+    }
+
+    for (const message of nextMessages) {
+        if (!message?.id) continue;
+        const existing = byId.get(message.id);
+        byId.set(message.id, existing ? mergeMessage(existing, message) : message);
+    }
+
+    return [...byId.values()].sort((a, b) => {
+        const aTime = new Date(a?.createdAt ?? 0).getTime();
+        const bTime = new Date(b?.createdAt ?? 0).getTime();
+
+        if (Number.isFinite(aTime) && Number.isFinite(bTime) && aTime !== bTime) {
+            return aTime - bTime;
+        }
+
+        return 0;
+    });
+}
+
 function updateMessageStatus(chat, messageId, status) {
     if (!chat) return chat;
 
     const messages = chat.messages.map((message) => {
         if (message.id !== messageId) return message;
-        if (message.status === status) return message;
-        return { ...message, status };
+        const nextStatus = resolveMessageStatus(message.status, status);
+        if (message.status === nextStatus) return message;
+        return { ...message, status: nextStatus };
     });
 
     return { ...chat, messages };
@@ -88,6 +165,7 @@ export function chatReducer(state, action) {
             if (!chatId) return state;
 
             const chats = ensureChat(state, chatId);
+            const mergedMessages = mergeMessages(chats[chatId].messages, messages);
 
             return {
                 ...state,
@@ -105,7 +183,7 @@ export function chatReducer(state, action) {
                         hasMoreHistory: hasMoreHistory ?? false,
                         historyLoading: false,
                         historyNotice: "",
-                        messages,
+                        messages: mergedMessages,
                         typingUsers: chats[chatId].typingUsers ?? [],
                     },
                 },
@@ -231,8 +309,14 @@ export function chatReducer(state, action) {
             const chats = ensureChat(state, chatId);
             const chat = chats[chatId];
 
-            // защита от дублей
-            if (chat.messages.some((m) => m.id === message.id)) return state;
+            const existingMessageIndex = chat.messages.findIndex((m) => m.id === message.id);
+            const messages = existingMessageIndex === -1
+                ? [...chat.messages, message]
+                : chat.messages.map((existingMessage, index) =>
+                    index === existingMessageIndex
+                        ? mergeMessage(existingMessage, message)
+                        : existingMessage
+                );
 
             return {
                 ...state,
@@ -240,7 +324,7 @@ export function chatReducer(state, action) {
                     ...chats,
                     [chatId]: {
                         ...chat,
-                        messages: [...chat.messages, message],
+                        messages,
                     },
                 },
             };

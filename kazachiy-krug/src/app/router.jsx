@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 
 import Phone from "../screens/Phone/Phone";
-import Code from "../screens/Auth/Code";
 import Chat from "../screens/Chat/Chat";
 import Settings from "../screens/Settings/Settings";
 import Profile from "../screens/Profile/Profile";
@@ -9,16 +8,14 @@ import Calls from "../screens/Calls/Calls";
 import Favorites from "../screens/Favorites/Favorites";
 import MyAds from "../screens/MyAds/MyAds";
 import AppFrame from "../layouts/AppFrame";
+import Registrations from "../screens/Admin/Registrations";
 
 export default function AppRouter({ currentUser,
     setCurrentUser,
-    phone,
-    setPhone,
     isNightMode,
     setIsNightMode,
 }) {
     const isAuth = Boolean(currentUser?.id);
-    const hasPhone = Boolean(phone);
 
     return (
         <Routes>
@@ -30,23 +27,25 @@ export default function AppRouter({ currentUser,
             <Route
                 path="/phone"
                 element={
-                    isAuth ? <Navigate to="/chat" replace /> : <Phone setPhone={setPhone} />
+                    isAuth ? <Navigate to="/chat" replace /> : <Phone setCurrentUser={setCurrentUser}/>
                 }
             />
 
 
 
-            <Route
-                path="/code"
+            <Route path="/code" element={<Navigate to={isAuth ? "/chat" : "/phone"} replace />} />
+
+            <Route 
+                path="/admin/registrations"
                 element={
-                    isAuth
-                        ? <Navigate to="/chat" replace />
-                        : hasPhone
-                            ? <Code setCurrentUser={setCurrentUser} />
-                            : <Navigate to="/phone" replace />
+                    isAuth && currentUser?.role === "admin"
+                        ? (
+                            <AppFrame currentUser={currentUser} isNightMode={isNightMode} setIsNightMode={setIsNightMode}>
+                                <Registrations />
+                            </AppFrame>
+                        )
+                        : <Navigate to={isAuth ? "/chat" : "/phone"} replace />
                 }
-
-
             />
 
             <Route

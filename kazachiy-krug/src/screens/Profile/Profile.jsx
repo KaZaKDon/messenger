@@ -15,7 +15,7 @@ const DEFAULT_DETAILS = {
 };
 
 export default function Profile({ currentUser }) {
-    const userName = currentUser?.name ?? "Казак61";
+    const userName = currentUser?.login ?? currentUser?.name ?? "Казак61";
     const fullName = useMemo(() => {
         if (!currentUser?.name) return "Дима Кузнецов";
         return currentUser.name;
@@ -121,10 +121,15 @@ export default function Profile({ currentUser }) {
 
             <div className="profile-card">
                 <div className="profile-top">
-                    <div className="profile-avatar">{userName.slice(0, 1).toUpperCase()}</div>
+                    <div className="profile-avatar">
+                        {currentUser?.avatar
+                            ? <img src={currentUser.avatar} alt="Аватар" />
+                            : userName.slice(0, 1).toUpperCase()}
+                    </div>
                     <div className="profile-main-info">
                         <h2>{userName}</h2>
                         <p>{fullName}</p>
+                        <small className="profile-phone">{details.phone}</small>
                         <span className="online">онлайн ●</span>
                     </div>
                 </div>

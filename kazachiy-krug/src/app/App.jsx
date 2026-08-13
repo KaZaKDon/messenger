@@ -14,15 +14,6 @@ export default function App() {
         }
     });
 
-    const [phone, setPhone] = useState(() => {
-        try {
-            return sessionStorage.getItem("phone") ?? "";
-        } catch {
-            sessionStorage.removeItem("phone");
-            return "";
-        }
-    });
-
     const [isNightMode, setIsNightMode] = useState(() => {
         try {
             return localStorage.getItem("theme") === "dark";
@@ -45,25 +36,11 @@ export default function App() {
     }, [currentUser]);
 
     useEffect(() => {
-        try {
-            if (phone) {
-                sessionStorage.setItem("phone", phone);
-            } else {
-                sessionStorage.removeItem("phone");
-            }
-        } catch {
-            // ignore storage errors
-        }
-    }, [phone]);
-
-
-    useEffect(() => {
         if (!currentUser?.id) return;
+        const token = sessionStorage.getItem("accessToken");
+        if (!token) return;
         const socket = connectSocket();
-        socket.emit("auth:restore", {
-            userId: currentUser.id,
-            name: currentUser.name
-        });
+        socket.emit("auth:session", { token });
     }, [currentUser]);
 
     useEffect(() => {
@@ -84,8 +61,6 @@ export default function App() {
             <AppRouter
                 currentUser={currentUser}
                 setCurrentUser={setCurrentUser}
-                phone={phone}
-                setPhone={setPhone}
                 isNightMode={isNightMode}
                 setIsNightMode={setIsNightMode}
             />

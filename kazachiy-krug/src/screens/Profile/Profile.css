@@ -49,6 +49,13 @@
     font-weight: 700;
 }
 
+.profile-avatar img {
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    object-fit: cover;
+}
+
 .profile-main-info h2 {
     margin: 0;
     font-size: 52px;
@@ -63,6 +70,15 @@
 .profile-main-info .online {
     font-size: 34px;
     color: #5a8f63;
+}
+
+
+.profile-phone {
+    display: block;
+    margin: 4px 0 8px;
+    color: var(--color-muted);
+    font-size: 20px;
+    letter-spacing: 0.04em;
 }
 
 .profile-detail-list {

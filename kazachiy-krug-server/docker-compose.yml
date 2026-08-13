@@ -1,14 +1,37 @@
 services:
+  backend:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/kazachiy_krug?schema=public
+      PORT: 3000
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      UPLOAD_DIR: /app/uploads
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      SOCKET_MEMORY_FALLBACK_ENABLED: "false"
+      CALL_MEMORY_FALLBACK_ENABLED: "false"
+    ports:
+      # The reverse proxy on the VPS is the only public entry point.
+      - "127.0.0.1:${BACKEND_PORT:-3000}:3000"
+    volumes:
+      - uploads_data:/app/uploads
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   postgres:
     image: postgres:16-alpine
-    container_name: kazachiy-krug-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: kazachiy_krug
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -19,3 +42,4 @@ services:
 
 volumes:
   postgres_data:
+  uploads_data:

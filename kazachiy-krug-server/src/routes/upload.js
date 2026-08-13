@@ -2,10 +2,11 @@ import { Router } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { env } from "../config/env.js";
 
 const router = Router();
 
-const UPLOAD_DIR = path.resolve(process.cwd(), "uploads");
+const UPLOAD_DIR = path.resolve(process.cwd(), env.uploadDir);
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif"];

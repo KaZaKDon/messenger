@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./settings.css";
+import { API_BASE_URL } from "../../shared/config";
 
 const SETTINGS_ITEMS = [
     { id: "privacy", icon: "🔒", title: "Приватность" },
@@ -15,12 +16,23 @@ export default function Settings() {
     const [openedItem, setOpenedItem] = useState(null);
     const navigate = useNavigate();
 
-    const handleDeleteAccount = () => {
-        const confirmed = window.confirm("Удалить аккаунт на этом устройстве?");
+    const handleDeleteAccount = async () => {
+        const confirmed = window.confirm("Выйти из аккаунта на этом устройстве?");
         if (!confirmed) return;
 
+        const token = sessionStorage.getItem("accessToken");
+        if (token) {
+            try {
+                await fetch(`${API_BASE_URL}/auth/logout`, {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+            } catch {
+                // The local session must still be removed when the server is unavailable.
+            }
+        }
         sessionStorage.removeItem("currentUser");
-        sessionStorage.removeItem("phone");
+        sessionStorage.removeItem("accessToken");
         navigate("/phone", { replace: true });
         window.location.reload();
     };
@@ -55,7 +67,7 @@ export default function Settings() {
                 </ul>
 
                 <button type="button" className="settings-delete-btn" onClick={handleDeleteAccount}>
-                    ⦿ Удалить аккаунт
+                    ⦿ Выйти из аккаунта
                 </button>
             </div>
 

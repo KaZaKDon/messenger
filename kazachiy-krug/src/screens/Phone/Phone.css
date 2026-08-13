@@ -1,11 +1,28 @@
 .first,
 .second {
-    height: 550px;
+    min-height: 550px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: space-around;
 }
+
+.auth-form { padding: 28px 20px; gap: 18px; justify-content: center; }
+.auth-fields { display: grid; gap: 12px; }
+.auth-fields label { text-align: left; font-size: 14px; }
+.auth-fields input { display: block; margin-top: 6px; box-sizing: border-box; }
+.auth-error { max-width: 300px; margin: 0; color: #b42318; text-align: center; }
+.auth-link { border: 0; background: transparent; color: var(--color-accent); cursor: pointer; text-decoration: underline; }
+.auth-tabs { display: flex; gap: 8px; }
+.auth-tabs button { padding: 8px 18px; border: 0; border-bottom: 2px solid transparent; background: transparent; cursor: pointer; }
+.auth-tabs button.active { border-color: var(--color-accent); color: var(--color-accent); }
+.password-field { position: relative; display: block; }
+.password-field button { position: absolute; right: 8px; top: 13px; border: 0; background: transparent; cursor: pointer; font-size: 20px; }
+.password-field input { padding-right: 48px; }
+.auth-result { text-align: center; }
+.auth-phone { color: var(--color-accent); font-size: 24px; font-weight: 700; }
+.auth-code { font-size: 38px; letter-spacing: 0.18em; }
+.auth-warning { color: var(--color-muted); font-size: 14px; }
 
 .auth-logo {
     margin-top: 50px;

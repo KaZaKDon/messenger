@@ -1,0 +1,7 @@
+node_modules
+npm-debug.log
+.env
+.git
+uploads
+src/**/__tests__
+test-client.html

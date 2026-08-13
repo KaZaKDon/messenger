@@ -51,8 +51,25 @@ enum CallStatus {
   missed
 }
 
+enum AccountStatus {
+  pending
+  active
+  rejected
+  blocked
+}
+
+enum UserRole {
+  user
+  admin
+}
+
 model User {
   id         String        @id
+  login      String?       @unique
+  passwordHash String?
+  status       AccountStatus @default(pending)
+  role         UserRole      @default(user)
+  approvalCode String?       @unique
   name       String
   phone      String        @unique
   avatar     String?
@@ -62,8 +79,53 @@ model User {
   messages    Message[]
   initiatedCalls CallSession[]
   settings    UserSettings?
+  sessions    Session[]
+  recoveryRequests PasswordRecoveryRequest[]
 
   @@map("users")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  adminId   String
+  action    String
+  targetId  String
+  details   Json?
+  createdAt DateTime @default(now())
+
+  @@index([adminId, createdAt])
+  @@index([targetId, createdAt])
+  @@map("audit_logs")
+}
+
+model PasswordRecoveryRequest {
+  id          String   @id @default(cuid())
+  userId      String
+  requestCode String   @unique
+  resolvedAt  DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@map("password_recovery_requests")
+}
+
+model Session {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  lastUsedAt DateTime  @default(now())
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
 }
 
 model Chat {

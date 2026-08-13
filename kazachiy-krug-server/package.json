@@ -2,8 +2,8 @@
     "name": "kazachiy-krug-server",
     "type": "module",
     "scripts": {
-        "dev": "nodemon src/index.js",
-        "start": "node src/index.js",
+        "dev": "nodemon --exec node --env-file-if-exists=.env src/index.js",
+        "start": "node --env-file-if-exists=.env src/index.js",
         "prisma:generate": "prisma generate",
         "migrate:deploy": "prisma migrate deploy",
         "prisma:seed": "node prisma/seed.js",

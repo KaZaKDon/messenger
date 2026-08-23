@@ -1,4 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { API_BASE_URL } from "../../../shared/config";
+import ComplaintDialog from "./ComplaintDialog";
 
 function formatTime(ts) {
     if (!ts) return "";
@@ -15,22 +17,28 @@ function formatTime(ts) {
     }
 }
 
+function imageSource(url) {
+    if (!url || url.startsWith("http")) return url;
+    return `${API_BASE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
+}
+
 export default function AnnouncementCard({
-    message,
+    advertisement,
     currentUserId,
     onWriteToAuthor,
 }) {
-    const isMe = message?.senderId === currentUserId;
+    const isMe = advertisement?.authorId === currentUserId;
+    const [complaintOpen, setComplaintOpen] = useState(false);
+    const [complaintSent, setComplaintSent] = useState(false);
 
     const imageUrls = useMemo(() => {
-        if (!message) return [];
-        if (Array.isArray(message.imageUrls)) return message.imageUrls.filter(Boolean);
-        if (typeof message.imageUrl === "string" && message.imageUrl.trim()) return [message.imageUrl.trim()];
-        return [];
-    }, [message]);
+        return Array.isArray(advertisement?.images)
+            ? advertisement.images.map((image) => image?.url).filter(Boolean)
+            : [];
+    }, [advertisement]);
 
-    const authorName = message?.senderName ?? "Автор";
-    const createdAt = formatTime(message?.createdAt);
+    const authorName = advertisement?.author?.name ?? "Автор";
+    const createdAt = formatTime(advertisement?.publishedAt);
 
     return (
         <div className={`announce-card ${isMe ? "mine" : "other"}`}>
@@ -42,26 +50,39 @@ export default function AnnouncementCard({
             {imageUrls.length ? (
                 <div className="announce-card-images">
                     {imageUrls.map((u) => (
-                        <img key={u} className="announce-card-image" src={u} alt="" />
+                        <img key={u} className="announce-card-image" src={imageSource(u)} alt="" />
                     ))}
                 </div>
             ) : null}
 
-            {message?.text ? (
-                <div className="announce-card-text">{message.text}</div>
-            ) : null}
+            <div className="announce-card-text">
+                <strong>{advertisement?.title}</strong>
+                <div>{advertisement?.settlement}{advertisement?.price ? ` • ${advertisement.price}` : ""}</div>
+                <div>{advertisement?.description}</div>
+            </div>
 
             {/* ✅ Кнопка только для НЕ автора */}
-            {!isMe && message?.senderId ? (
+            {!isMe && advertisement?.authorId ? (
                 <div className="announce-card-actions">
                     <button
                         type="button"
                         className="announce-card-btn"
-                        onClick={() => onWriteToAuthor?.(message.senderId)}
+                        onClick={() => onWriteToAuthor?.(advertisement.authorId)}
                     >
                         Написать автору
                     </button>
+                    {advertisement?.author?.phone ? <a className="announce-card-btn" href={`tel:${advertisement.author.phone}`}>Позвонить</a> : null}
+                    <button type="button" className="announce-card-btn secondary" disabled={complaintSent} onClick={() => setComplaintOpen(true)}>
+                        {complaintSent ? "Жалоба отправлена" : "Пожаловаться"}
+                    </button>
                 </div>
+            ) : null}
+            {complaintOpen ? (
+                <ComplaintDialog
+                    advertisement={advertisement}
+                    onClose={() => setComplaintOpen(false)}
+                    onSent={() => { setComplaintSent(true); setComplaintOpen(false); }}
+                />
             ) : null}
         </div>
     );

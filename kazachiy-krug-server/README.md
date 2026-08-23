@@ -12,6 +12,7 @@ Backend for the Messenger monorepo (`Express + Socket.IO + Prisma`).
 - `npm run seed:history` — seed message history.
 - `npm run test` — run socket tests.
 - `npm run admin:bootstrap` — create or update the first active administrator from `ADMIN_*` variables.
+- `npm run db:cleanup:legacy-users -- --confirm=DELETE_ALL_EXCEPT_ADMIN` — one-time cleanup that keeps the active administrator from `ADMIN_USER_ID` and deletes every other account with its test data.
 
 ## Quick start
 
@@ -50,6 +51,10 @@ See `.env.example` for supported variables:
 - `TRUST_PROXY` — set to `true` behind one trusted reverse proxy so generated upload URLs use HTTPS.
 - `SOCKET_MEMORY_FALLBACK_ENABLED` — local/dev fallback for socket data when DB is unavailable.
 - `CALL_MEMORY_FALLBACK_ENABLED` — local/dev fallback for call state when DB is unavailable.
+- `REGISTRATION_CONTACT_PHONE` — Russian mobile number shown to an applicant for the confirmation call.
+- `REGISTRATION_*_VERSION` — versions stored with the three legal acceptances.
+
+The registration contact must be configured in the private `.env`. The registration module and `.env.example` do not hard-code that contact.
 
 ## Deploy with Docker Compose
 

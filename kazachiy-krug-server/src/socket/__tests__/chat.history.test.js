@@ -43,7 +43,16 @@ test("chat:history returns paginated payload (happy-path)", async () => {
     const originalChatFindFirst = prisma.chat.findFirst;
     const originalMessageFindMany = prisma.message.findMany;
 
-    prisma.chat.findFirst = async () => ({ id: "group-11" });
+    prisma.chat.findFirst = async () => ({
+        id: "group-11",
+        type: "group",
+        members: [],
+        groupRule: {
+            visibility: "public",
+            status: "active",
+            publishPolicy: "members",
+        },
+    });
     prisma.message.findMany = async () =>
         Array.from({ length: 51 }, (_, i) => ({
             id: `m-${i + 1}`,
@@ -105,7 +114,12 @@ test("chat:history falls back to legacy message select when media fields are una
 
     const findManyPayloads = [];
 
-    prisma.chat.findFirst = async () => ({ id: "room-user-1-user-4" });
+    prisma.chat.findFirst = async () => ({
+        id: "room-user-1-user-4",
+        type: "private",
+        members: [{ userId: "user-1" }],
+        groupRule: null,
+    });
     prisma.message.findMany = async (payload) => {
         findManyPayloads.push(payload);
 
@@ -156,7 +170,12 @@ test("chat:history maps legacy audio URL to audio attachment", async () => {
     const originalChatFindFirst = prisma.chat.findFirst;
     const originalMessageFindMany = prisma.message.findMany;
 
-    prisma.chat.findFirst = async () => ({ id: "room-user-1-user-4" });
+    prisma.chat.findFirst = async () => ({
+        id: "room-user-1-user-4",
+        type: "private",
+        members: [{ userId: "user-1" }],
+        groupRule: null,
+    });
     prisma.message.findMany = async (payload) => {
         if (payload.select.type) {
             throw new Error("Unknown field `type` for select statement on model `Message`.");

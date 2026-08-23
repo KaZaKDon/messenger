@@ -1,0 +1,70 @@
+.my-ads-page { min-height: 100%; padding: 34px clamp(18px, 4vw, 64px); background: var(--bg-main); color: var(--color-primary); }
+.my-ads-header { max-width: 1180px; margin: 0 auto; display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.my-ads-eyebrow { color: var(--color-accent); font-size: 13px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.my-ads-header h1 { margin: 6px 0 4px; font-size: clamp(34px, 4vw, 50px); line-height: 1.05; }
+.my-ads-header p { margin: 0; color: var(--color-muted); font-size: 17px; }
+.my-ads-refresh, .my-ad-back { border: 1px solid var(--border-light); border-radius: 10px; background: var(--bg-card); color: var(--color-primary); padding: 11px 17px; cursor: pointer; }
+.my-ads-summary { max-width: 1180px; margin: 26px auto 14px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.my-ads-summary div { min-height: 82px; padding: 16px 18px; border: 1px solid var(--border-light); border-radius: 14px; background: var(--bg-card); display: flex; align-items: center; justify-content: space-between; }
+.my-ads-summary span { color: var(--color-muted); }
+.my-ads-summary strong { color: var(--color-accent); font-size: 28px; }
+.my-ads-panel { max-width: 1180px; margin: 0 auto; display: grid; gap: 14px; }
+.my-ads-panel.editing { display: block; margin-top: 24px; }
+.my-ad-card { display: grid; grid-template-columns: 180px minmax(0, 1fr) auto; gap: 20px; align-items: stretch; border: 1px solid var(--border-light); border-radius: 16px; background: var(--bg-card); padding: 16px; }
+.my-ad-image, .my-ad-image-placeholder { width: 180px; height: 138px; object-fit: cover; border-radius: 12px; }
+.my-ad-image-placeholder { display: grid; place-items: center; background: rgba(122, 46, 46, .08); color: var(--color-accent); font-size: 38px; }
+.my-ad-copy { min-width: 0; }
+.my-ad-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.my-ad-title-row h2 { margin: 0; font-size: 23px; }
+.my-ad-status { flex: 0 0 auto; border-radius: 999px; padding: 5px 10px; background: rgba(47, 125, 65, .12); color: #2f7d41; font-size: 13px; font-weight: 700; }
+.my-ad-status.status-needs_edit, .my-ad-status.status-expired { background: rgba(174, 117, 21, .13); color: #9a6814; }
+.my-ad-status.status-removed { background: rgba(154, 48, 48, .12); color: #a43b3b; }
+.my-ad-description { margin: 10px 0; color: var(--color-primary); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.my-ad-meta { display: flex; flex-wrap: wrap; gap: 8px 16px; color: var(--color-muted); font-size: 14px; }
+.my-ad-actions { display: flex; flex-direction: column; justify-content: center; gap: 9px; min-width: 132px; }
+.my-ad-actions button { border: 1px solid var(--border-light); border-radius: 9px; padding: 10px 14px; background: var(--bg-main); color: var(--color-primary); cursor: pointer; }
+.my-ad-actions button.primary { background: var(--color-accent); border-color: var(--color-accent); color: #fff; }
+.my-ad-actions button.danger { color: #b44646; }
+.my-ad-actions button:disabled, .my-ads-refresh:disabled { opacity: .55; cursor: default; }
+.my-ads-notice, .my-ads-empty { border: 1px dashed var(--border-light); border-radius: 16px; padding: 34px; text-align: center; color: var(--color-muted); background: var(--bg-card); }
+.my-ads-notice.error { color: #b44646; }
+.my-ads-empty span { font-size: 42px; }
+.my-ads-empty h2 { margin: 10px 0 5px; color: var(--color-primary); }
+.my-ads-empty p { margin: 0; }
+
+.my-ad-moderation {
+    margin-top: 8px;
+    border-left: 3px solid var(--color-accent);
+    padding: 7px 10px;
+    background: rgba(122, 46, 46, .08);
+    color: var(--color-primary);
+}
+
+.my-ad-editor {
+    width: 100%;
+}
+.my-ad-back { margin-bottom: 14px; }
+
+@media (max-width: 820px) {
+    .my-ads-page { padding: 20px 12px; }
+    .my-ads-header { align-items: center; }
+    .my-ads-header p { display: none; }
+    .my-ads-summary { grid-template-columns: repeat(3, 1fr); margin-top: 18px; }
+    .my-ads-summary div { min-height: 68px; padding: 10px; flex-direction: column; align-items: flex-start; }
+    .my-ad-card { grid-template-columns: 96px minmax(0, 1fr); gap: 12px; }
+    .my-ad-image, .my-ad-image-placeholder { width: 96px; height: 96px; }
+    .my-ad-actions { grid-column: 1 / -1; flex-direction: row; min-width: 0; }
+    .my-ad-actions button { flex: 1; }
+    .my-ad-title-row { display: block; }
+    .my-ad-status { display: inline-block; margin-top: 7px; }
+}
+
+@media (max-width: 480px) {
+    .my-ads-header h1 { font-size: 30px; }
+    .my-ads-refresh { padding: 9px 11px; }
+    .my-ads-summary span { font-size: 12px; }
+    .my-ads-summary strong { font-size: 23px; }
+    .my-ad-card { grid-template-columns: 74px minmax(0, 1fr); padding: 12px; }
+    .my-ad-image, .my-ad-image-placeholder { width: 74px; height: 74px; }
+    .my-ad-title-row h2 { font-size: 18px; }
+}

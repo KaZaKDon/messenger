@@ -1,4 +1,12 @@
-import { PrismaClient, ChatType, GroupMode } from "@prisma/client";
+import {
+    PrismaClient,
+    ChatType,
+    GroupMode,
+    GroupContentType,
+    GroupVisibility,
+    GroupPublishPolicy,
+    GroupStatus,
+} from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -48,22 +56,48 @@ async function main() {
     }
 
     const groupRules = [
-        { chatId: "group-1", mode: GroupMode.readonly, requiresAnnouncementWithImage: false, publishUserIds: ["user-1"] },
-        { chatId: "group-2", mode: GroupMode.readonly, requiresAnnouncementWithImage: false, publishUserIds: ["user-1"] },
-        { chatId: "group-3", mode: GroupMode.readonly, requiresAnnouncementWithImage: false, publishUserIds: ["user-1"] },
+        {
+            chatId: "group-1",
+            mode: GroupMode.readonly,
+            contentType: GroupContentType.notice,
+            publishPolicy: GroupPublishPolicy.admin_moderator,
+            requiresAnnouncementWithImage: false,
+            publishUserIds: ["user-1"],
+        },
+        {
+            chatId: "group-2",
+            mode: GroupMode.readonly,
+            contentType: GroupContentType.advertisement,
+            publishPolicy: GroupPublishPolicy.selected_authors,
+            requiresAnnouncementWithImage: false,
+            publishUserIds: ["user-1"],
+        },
+        {
+            chatId: "group-3",
+            mode: GroupMode.readonly,
+            contentType: GroupContentType.advertisement,
+            publishPolicy: GroupPublishPolicy.selected_authors,
+            requiresAnnouncementWithImage: false,
+            publishUserIds: ["user-1"],
+        },
 
 
-        { chatId: "group-4", mode: GroupMode.announcements, requiresAnnouncementWithImage: true },
-        { chatId: "group-5", mode: GroupMode.announcements, requiresAnnouncementWithImage: true },
-        { chatId: "group-6", mode: GroupMode.announcements, requiresAnnouncementWithImage: true },
-        { chatId: "group-7", mode: GroupMode.announcements, requiresAnnouncementWithImage: true },
-        { chatId: "group-8", mode: GroupMode.announcements, requiresAnnouncementWithImage: true },
-        { chatId: "group-9", mode: GroupMode.announcements, requiresAnnouncementWithImage: true },
-        { chatId: "group-10", mode: GroupMode.announcements, requiresAnnouncementWithImage: true },
-        { chatId: "group-11", mode: GroupMode.announcements, requiresAnnouncementWithImage: true },
+        { chatId: "group-4", mode: GroupMode.announcements, contentType: GroupContentType.advertisement, advertisementLifetimeDays: 7, requiresAnnouncementWithImage: false },
+        { chatId: "group-5", mode: GroupMode.announcements, contentType: GroupContentType.advertisement, advertisementLifetimeDays: 7, requiresAnnouncementWithImage: false },
+        { chatId: "group-6", mode: GroupMode.announcements, contentType: GroupContentType.advertisement, advertisementLifetimeDays: 7, requiresAnnouncementWithImage: false },
+        { chatId: "group-7", mode: GroupMode.announcements, contentType: GroupContentType.advertisement, advertisementLifetimeDays: 7, requiresAnnouncementWithImage: false },
+        { chatId: "group-8", mode: GroupMode.announcements, contentType: GroupContentType.advertisement, advertisementLifetimeDays: 7, requiresAnnouncementWithImage: false },
+        { chatId: "group-9", mode: GroupMode.announcements, contentType: GroupContentType.advertisement, advertisementLifetimeDays: 7, requiresAnnouncementWithImage: false },
+        { chatId: "group-10", mode: GroupMode.announcements, contentType: GroupContentType.advertisement, advertisementLifetimeDays: 7, requiresAnnouncementWithImage: false },
+        { chatId: "group-11", mode: GroupMode.announcements, contentType: GroupContentType.advertisement, advertisementLifetimeDays: 7, requiresAnnouncementWithImage: false },
 
         { chatId: "group-12", mode: GroupMode.chat, requiresAnnouncementWithImage: false },
-        { chatId: "group-13", mode: GroupMode.chat, requiresAnnouncementWithImage: false },
+        {
+            chatId: "group-13",
+            mode: GroupMode.chat,
+            visibility: GroupVisibility.private,
+            requiresAnnouncementWithImage: false,
+        },
     ];
 
     for (const gr of groupRules) {
@@ -71,15 +105,26 @@ async function main() {
             where: { chatId: gr.chatId },
             update: {
                 mode: gr.mode,
+                contentType: gr.contentType ?? GroupContentType.chat,
+                visibility: gr.visibility ?? GroupVisibility.public,
+                publishPolicy: gr.publishPolicy ?? GroupPublishPolicy.members,
+                status: GroupStatus.active,
                 requiresAnnouncementWithImage: gr.requiresAnnouncementWithImage,
+                advertisementLifetimeDays: gr.advertisementLifetimeDays ?? null,
                 publishUserIds: gr.publishUserIds ?? null,
             },
-            create: gr,
+            create: {
+                ...gr,
+                contentType: gr.contentType ?? GroupContentType.chat,
+                visibility: gr.visibility ?? GroupVisibility.public,
+                publishPolicy: gr.publishPolicy ?? GroupPublishPolicy.members,
+                status: GroupStatus.active,
+            },
         });
     }
 
     const allUsers = users.map((u) => u.id);
-    const restrictedGroupId = "group-12";
+    const restrictedGroupId = "group-13";
     const restrictedMembers = ["user-1", "user-7"];
 
     const privateMembers = [

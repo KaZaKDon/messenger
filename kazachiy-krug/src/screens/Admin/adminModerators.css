@@ -1,0 +1,44 @@
+.admin-moderators-page { display: grid; align-content: start; gap: 18px; }
+.admin-moderators-page .admin-scaffold-header { margin-bottom: 0; }
+.admin-moderator-counters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.admin-moderator-counters > div { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--border-light); border-radius: 13px; padding: 15px; background: var(--bg-card); }
+.admin-moderator-counters span { color: var(--color-muted); font-size: 13px; }
+.admin-moderator-counters strong { color: var(--color-accent); font-size: 24px; }
+.admin-moderator-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--border-light); }
+.admin-moderator-tabs button { display: flex; align-items: center; gap: 8px; border: 0; border-bottom: 3px solid transparent; padding: 12px 16px; background: transparent; color: var(--color-muted); font: inherit; cursor: pointer; }
+.admin-moderator-tabs button.active { border-bottom-color: var(--color-accent); color: var(--color-accent); font-weight: 700; }
+.admin-moderator-tabs strong { min-width: 22px; border-radius: 999px; padding: 3px 7px; background: rgba(122, 46, 46, 0.12); text-align: center; font-size: 11px; }
+.admin-moderator-search { display: flex; align-items: center; gap: 9px; border: 1px solid var(--border-light); border-radius: 11px; padding: 0 13px; background: var(--bg-card); }
+.admin-moderator-search input { width: 100%; min-width: 0; min-height: 44px; border: 0; outline: 0; background: transparent; color: var(--color-primary); font: inherit; }
+.admin-moderator-error { margin: 0; border: 1px solid rgba(180,35,24,.25); border-radius: 11px; padding: 11px 13px; background: rgba(180,35,24,.08); color: #b42318; }
+.admin-moderator-list { display: grid; gap: 10px; }
+.admin-moderator-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 14px; border: 1px solid var(--border-light); border-radius: 15px; padding: 15px; background: var(--bg-card); }
+.admin-moderator-avatar { width: 44px; height: 44px; display: grid; place-items: center; overflow: hidden; border-radius: 50%; background: rgba(122,46,46,.12); color: var(--color-accent); font-weight: 800; }
+.admin-moderator-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.admin-moderator-main { min-width: 0; display: grid; gap: 3px; }
+.admin-moderator-main span, .admin-moderator-main small { overflow-wrap: anywhere; color: var(--color-muted); }
+.admin-moderator-main small { font-size: 12px; }
+.admin-moderator-status { border-radius: 999px; padding: 5px 9px; font-size: 12px; font-weight: 700; }
+.admin-moderator-status.status-active { background: rgba(38,122,59,.12); color: #267a3b; }
+.admin-moderator-status.status-blocked { background: rgba(165,43,43,.11); color: #a52b2b; }
+.admin-moderator-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.admin-moderator-actions button { min-height: 40px; border: 1px solid var(--border-light); border-radius: 10px; padding: 0 13px; background: var(--bg-card); color: var(--color-primary); font: inherit; cursor: pointer; }
+.admin-moderator-actions button.primary { border-color: var(--color-accent); background: var(--color-accent); color: #fff; }
+.admin-moderator-actions button.danger { color: #b42318; }
+.admin-moderator-actions button:disabled { cursor: not-allowed; opacity: .5; }
+.admin-moderator-empty { margin: 0; border: 1px dashed var(--border-light); border-radius: 15px; padding: 38px; color: var(--color-muted); text-align: center; }
+:root[data-theme="dark"] .admin-moderator-status.status-active { color: #83d896; }
+:root[data-theme="dark"] .admin-moderator-status.status-blocked,
+:root[data-theme="dark"] .admin-moderator-actions button.danger,
+:root[data-theme="dark"] .admin-moderator-error { color: #ff9f96; }
+@media (max-width: 980px) {
+    .admin-moderator-counters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .admin-moderator-card { grid-template-columns: auto minmax(0, 1fr) auto; }
+    .admin-moderator-actions { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) {
+    .admin-moderator-counters { grid-template-columns: 1fr 1fr; }
+    .admin-moderator-card { grid-template-columns: auto minmax(0, 1fr); }
+    .admin-moderator-status { grid-column: 2; justify-self: start; }
+    .admin-moderator-actions { display: grid; grid-template-columns: 1fr; }
+}

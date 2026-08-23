@@ -2,6 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AppSidebar from "../components/AppSidebar/AppSidebar";
 import { connectSocket } from "../shared/socket";
+import { useContacts } from "../shared/useContacts";
+import { useMessengerNotifications } from "../shared/useMessengerNotifications";
+import { useNotificationPreferences } from "../shared/useNotificationPreferences";
+import { showBrowserNotification } from "../shared/browserNotifications";
+import logoDark from "../assets/branding/kazachiy-krug-kvk-simplified-dark.png";
+import logoLight from "../assets/branding/kazachiy-krug-kvk-detailed.png";
 import "./AppFrame.css";
 
 const DRAWER_BREAKPOINT = 1199;
@@ -10,6 +16,11 @@ export default function AppFrame({ currentUser, isNightMode, setIsNightMode, chi
     const navigate = useNavigate();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [incomingCall, setIncomingCall] = useState(null);
+    const { contacts } = useContacts(currentUser?.id);
+    const personalUnreadCount = useMessengerNotifications(currentUser?.id);
+    const { preferences } = useNotificationPreferences();
+    const mobileLogo = isNightMode ? logoDark : logoLight;
+    const incomingContact = contacts.find((contact) => contact.id === incomingCall?.fromUserId) ?? null;
     const ringtoneAudioContextRef = useRef(null);
     const ringtoneTimerRef = useRef(null);
 
@@ -54,12 +65,25 @@ export default function AppFrame({ currentUser, isNightMode, setIsNightMode, chi
         if (!socket) return undefined;
 
         const onIncomingCall = (payload = {}) => {
+            const caller = contacts.find((contact) => contact.id === payload.fromUserId);
             setIncomingCall({
                 callId: payload.callId ?? null,
                 chatId: payload.chatId ?? null,
                 fromUserId: payload.fromUserId ?? null,
                 type: payload.type ?? "audio",
                 status: payload.status ?? "ringing",
+            });
+            showBrowserNotification({
+                title: `Входящий звонок от ${caller?.name ?? "пользователя"}`,
+                tag: `call-${payload.callId ?? payload.fromUserId ?? "incoming"}`,
+                enabled: preferences.callBrowser,
+                onClick: () => {
+                    if (payload.fromUserId) {
+                        navigate(`/chat?user=${encodeURIComponent(payload.fromUserId)}`);
+                    } else {
+                        navigate("/chat");
+                    }
+                },
             });
         };
 
@@ -78,7 +102,7 @@ export default function AppFrame({ currentUser, isNightMode, setIsNightMode, chi
             socket.off("call:ended", onCallClosed);
             socket.off("call:accepted", onCallClosed);
         };
-    }, [currentUser?.id]);
+    }, [contacts, currentUser?.id, navigate, preferences.callBrowser]);
 
     useEffect(() => {
         const stopRingtone = () => {
@@ -109,7 +133,7 @@ export default function AppFrame({ currentUser, isNightMode, setIsNightMode, chi
             osc.stop(ctx.currentTime + 0.24);
         };
 
-        if (incomingCall?.status === "ringing") {
+        if (incomingCall?.status === "ringing" && preferences.callSound) {
             if (!ringtoneAudioContextRef.current) {
                 try {
                     ringtoneAudioContextRef.current = new AudioContext();
@@ -126,17 +150,26 @@ export default function AppFrame({ currentUser, isNightMode, setIsNightMode, chi
 
         stopRingtone();
         return stopRingtone;
-    }, [incomingCall?.status]);
+    }, [incomingCall?.status, preferences.callSound]);
 
     const handleAcceptIncoming = () => {
         if (!incomingCall?.callId) return;
-        connectSocket().emit("call:accept", { callId: incomingCall.callId });
         if (incomingCall.fromUserId) {
-            navigate(`/chat?user=${encodeURIComponent(incomingCall.fromUserId)}`);
+            navigate(`/chat?user=${encodeURIComponent(incomingCall.fromUserId)}`, {
+                state: {
+                    acceptedCall: {
+                        ...incomingCall,
+                        status: "ringing",
+                        direction: "incoming",
+                        initiatorId: incomingCall.fromUserId,
+                        startedAt: null,
+                        autoAccept: true,
+                    },
+                },
+            });
         } else {
             navigate("/chat");
         }
-        setIncomingCall(null);
     };
 
     const handleDeclineIncoming = () => {
@@ -147,15 +180,18 @@ export default function AppFrame({ currentUser, isNightMode, setIsNightMode, chi
 
     return (
         <div className="app-frame">
-            <button
-                type="button"
-                className="app-frame-drawer-button"
-                onClick={() => setIsSidebarOpen(true)}
-                aria-label="Открыть меню"
-                aria-expanded={isSidebarOpen}
-            >
-                ☰
-            </button>
+            <header className="app-frame-mobile-bar">
+                <button
+                    type="button"
+                    className="app-frame-drawer-button"
+                    onClick={() => setIsSidebarOpen(true)}
+                    aria-label="Открыть меню"
+                    aria-expanded={isSidebarOpen}
+                >
+                    ☰
+                </button>
+                <img className="app-frame-mobile-logo" src={mobileLogo} alt="Казачий круг" />
+            </header>
 
             {isSidebarOpen ? (
                 <button
@@ -172,14 +208,18 @@ export default function AppFrame({ currentUser, isNightMode, setIsNightMode, chi
                 onNightModeChange={setIsNightMode}
                 isOpen={isSidebarOpen}
                 onNavigate={closeSidebar}
+                personalUnreadCount={personalUnreadCount}
             />
 
             <main className="app-frame-content">{children}</main>
 
             {incomingCall ? (
                 <div className="incoming-call-modal" role="dialog" aria-modal="true">
+                    <div className="incoming-call-avatar">
+                        {incomingContact?.avatar ? <img src={incomingContact.avatar} alt="" /> : String(incomingContact?.name || "?").slice(0, 1).toUpperCase()}
+                    </div>
                     <strong>{incomingCall.type === "video" ? "🎥 Входящий видеозвонок" : "📞 Входящий аудиозвонок"}</strong>
-                    <span>{incomingCall.fromUserId ? `От: ${incomingCall.fromUserId}` : "Входящий звонок"}</span>
+                    <span>{incomingContact?.name ?? "Входящий звонок"}</span>
                     <div className="incoming-call-actions">
                         <button type="button" onClick={handleAcceptIncoming}>Принять</button>
                         <button type="button" onClick={handleDeclineIncoming}>Отклонить</button>

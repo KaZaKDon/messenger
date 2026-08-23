@@ -5,10 +5,23 @@ import Chat from "../screens/Chat/Chat";
 import Settings from "../screens/Settings/Settings";
 import Profile from "../screens/Profile/Profile";
 import Calls from "../screens/Calls/Calls";
-import Favorites from "../screens/Favorites/Favorites";
 import MyAds from "../screens/MyAds/MyAds";
+import SupportRequests from "../screens/SupportRequests/SupportRequests";
 import AppFrame from "../layouts/AppFrame";
+import AdminShell from "../layouts/AdminShell";
+import AdminDashboard from "../screens/Admin/AdminDashboard";
+import AdminUsers from "../screens/Admin/AdminUsers";
+import AdminGroups from "../screens/Admin/AdminGroups";
+import AdminAdvertisements from "../screens/Admin/AdminAdvertisements";
+import AdminSettlements from "../screens/Admin/AdminSettlements";
+import AdminComplaints from "../screens/Admin/AdminComplaints";
+import AdminSupportRequests from "../screens/Admin/AdminSupportRequests";
+import AdminModerators from "../screens/Admin/AdminModerators";
+import AdminPayments from "../screens/Admin/AdminPayments";
 import Registrations from "../screens/Admin/Registrations";
+import PasswordRecoveries from "../screens/Admin/PasswordRecoveries";
+import { isAdminRole } from "../screens/Admin/adminNavigation";
+import Landing from "../screens/Landing/Landing";
 
 export default function AppRouter({ currentUser,
     setCurrentUser,
@@ -19,15 +32,22 @@ export default function AppRouter({ currentUser,
 
     return (
         <Routes>
-            {/* авторизация */}
             <Route
                 path="/"
-                element={<Navigate to={isAuth ? "/chat" : "/phone"} replace />}
+                element={isAuth ? <Navigate to="/chat" replace /> : <Landing />}
             />
             <Route
                 path="/phone"
                 element={
-                    isAuth ? <Navigate to="/chat" replace /> : <Phone setCurrentUser={setCurrentUser}/>
+                    isAuth
+                        ? <Navigate to="/chat" replace />
+                        : (
+                            <Phone
+                                setCurrentUser={setCurrentUser}
+                                isNightMode={isNightMode}
+                                setIsNightMode={setIsNightMode}
+                            />
+                        )
                 }
             />
 
@@ -35,15 +55,84 @@ export default function AppRouter({ currentUser,
 
             <Route path="/code" element={<Navigate to={isAuth ? "/chat" : "/phone"} replace />} />
 
-            <Route 
+            <Route
+                path="/admin"
+                element={
+                    isAuth && isAdminRole(currentUser?.role)
+                        ? (
+                            <AdminShell
+                                currentUser={currentUser}
+                                setCurrentUser={setCurrentUser}
+                                isNightMode={isNightMode}
+                                setIsNightMode={setIsNightMode}
+                            />
+                        )
+                        : <Navigate to={isAuth ? "/chat" : "/phone"} replace />
+                }
+            >
+                <Route index element={<AdminDashboard role={currentUser?.role} />} />
+                <Route path="overview" element={<AdminDashboard role={currentUser?.role} />} />
+                <Route path="users" element={<AdminUsers currentUser={currentUser} />}>
+                    <Route
+                        path="registrations"
+                        element={
+                            currentUser?.role === "admin"
+                                ? <Registrations />
+                                : <Navigate to="/admin/users" replace />
+                        }
+                    />
+                    <Route
+                        path="password-recoveries"
+                        element={
+                            currentUser?.role === "admin"
+                                ? <PasswordRecoveries />
+                                : <Navigate to="/admin/users" replace />
+                        }
+                    />
+                </Route>
+                <Route
+                    path="groups"
+                    element={<AdminGroups currentUser={currentUser} />}
+                />
+                <Route
+                    path="advertisements"
+                    element={<AdminAdvertisements />}
+                />
+                <Route
+                    path="settlements"
+                    element={currentUser?.role === "admin" ? <AdminSettlements /> : <Navigate to="/admin" replace />}
+                />
+                <Route
+                    path="complaints"
+                    element={<AdminComplaints />}
+                />
+                <Route
+                    path="support-requests"
+                    element={<AdminSupportRequests />}
+                />
+                <Route
+                    path="payments"
+                    element={
+                        currentUser?.role === "admin"
+                            ? <AdminPayments />
+                            : <Navigate to="/admin" replace />
+                    }
+                />
+                <Route
+                    path="moderators"
+                    element={
+                        currentUser?.role === "admin"
+                            ? <AdminModerators currentUser={currentUser} />
+                            : <Navigate to="/admin" replace />
+                    }
+                />
+            </Route>
+
+            <Route
                 path="/admin/registrations"
                 element={
                     isAuth && currentUser?.role === "admin"
-                        ? (
-                            <AppFrame currentUser={currentUser} isNightMode={isNightMode} setIsNightMode={setIsNightMode}>
-                                <Registrations />
-                            </AppFrame>
-                        )
+                        ? <Navigate to="/admin/users/registrations" replace />
                         : <Navigate to={isAuth ? "/chat" : "/phone"} replace />
                 }
             />
@@ -103,7 +192,7 @@ export default function AppRouter({ currentUser,
             />
 
             <Route
-                path="/favorites"
+                path="/support-requests"
                 element={
                     isAuth
                         ? (
@@ -112,7 +201,7 @@ export default function AppRouter({ currentUser,
                                 isNightMode={isNightMode}
                                 setIsNightMode={setIsNightMode}
                             >
-                                <Favorites />
+                                <SupportRequests currentUser={currentUser} />
                             </AppFrame>
                         )
                         : <Navigate to="/phone" replace />
@@ -146,7 +235,7 @@ export default function AppRouter({ currentUser,
                                 isNightMode={isNightMode}
                                 setIsNightMode={setIsNightMode}
                             >
-                                <Profile currentUser={currentUser} />
+                                <Profile currentUser={currentUser} setCurrentUser={setCurrentUser} />
                             </AppFrame>
                         )
 
@@ -157,7 +246,7 @@ export default function AppRouter({ currentUser,
 
             <Route
                 path="*"
-                element={<Navigate to={isAuth ? "/chat" : "/phone"} replace />}
+                element={<Navigate to={isAuth ? "/chat" : "/"} replace />}
             />
         </Routes>
     );

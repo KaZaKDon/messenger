@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useReducer } from "react";
+import { useEffect, useMemo, useReducer, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { chatReducer, initialState } from "./chatReducer";
 import { useChatSocket } from "./hooks/useChatSocket";
+import { useAdvertisementGroupSummaries } from "./hooks/useAdvertisementGroupSummaries";
 import DialogList from "./components/DialogList";
 import ChatWindow from "./components/ChatWindow";
 import { connectSocket, getSocket } from "../../shared/socket";
+import { useUserBlocks } from "../../shared/useUserBlocks";
+import { announceActiveChat } from "../../shared/messengerNotifications";
 
 import "./chat.css";
 import "../../styles/variables.css";
@@ -12,28 +15,6 @@ import "../../styles/variables.css";
 function getPrivateChatId(userA, userB) {
     return `room-${[userA, userB].sort().join("-")}`;
 }
-
-const ADS_STORAGE_KEY = "myAnnouncements";
-
-function saveMyAnnouncement(message, chatId) {
-    if (!/^group-(?:[4-9]|10)$/.test(chatId)) return;
-
-    try {
-        const raw = localStorage.getItem(ADS_STORAGE_KEY);
-        const current = raw ? JSON.parse(raw) : [];
-        const next = Array.isArray(current) ? current : [];
-        next.unshift({
-            id: message.id,
-            chatId,
-            text: message.text,
-            createdAt: new Date().toISOString(),
-        });
-        localStorage.setItem(ADS_STORAGE_KEY, JSON.stringify(next.slice(0, 200)));
-    } catch {
-        // ignore local storage errors
-    }
-}
-
 
 export default function Chat({ currentUser }) {
     const location = useLocation();
@@ -45,9 +26,19 @@ export default function Chat({ currentUser }) {
     });
 
     const { users, chats, activeChatUserId, activeChatId } = state;
+    const requestedCallRef = useRef("");
+    const { blockedIds, block, unblock } = useUserBlocks(currentUser.id);
+    const advertisementSummaries = useAdvertisementGroupSummaries({
+        currentUserId: currentUser.id,
+        activeGroupId: activeChatUserId?.startsWith("group-") ? activeChatUserId : null,
+    });
     const userToOpen = useMemo(() => {
         const params = new URLSearchParams(location.search);
         return params.get("user");
+    }, [location.search]);
+    const requestedCallType = useMemo(() => {
+        const value = new URLSearchParams(location.search).get("call");
+        return value === "audio" || value === "video" ? value : null;
     }, [location.search]);
 
     useEffect(() => {
@@ -61,8 +52,8 @@ export default function Chat({ currentUser }) {
 
         // Важно: query-параметр ?user= используем только для первичного открытия.
         // После этого убираем его, чтобы ручной выбор в списке чатов не перезаписывался.
-        navigate("/chat", { replace: true });
-    }, [activeChatUserId, currentUser.id, navigate, userToOpen, users]);
+        navigate(requestedCallType ? `/chat?call=${requestedCallType}` : "/chat", { replace: true, state: location.state });
+    }, [activeChatUserId, currentUser.id, location.state, navigate, requestedCallType, userToOpen, users]);
 
     const resolvedChatId = useMemo(() => {
         if (activeChatId) return activeChatId;
@@ -87,6 +78,11 @@ export default function Chat({ currentUser }) {
             }
         );
     }, [chats, resolvedChatId]);
+
+    useEffect(() => {
+        announceActiveChat(resolvedChatId);
+        return () => announceActiveChat(null);
+    }, [resolvedChatId]);
 
     // 🔹 сокет (всегда)
     useChatSocket(
@@ -157,8 +153,6 @@ export default function Chat({ currentUser }) {
         };
 
         socket.emit("message:send", message);
-        saveMyAnnouncement(message, resolvedChatId);
-
         dispatch({
             type: "RECEIVE_MESSAGE",
             payload: { chatId: resolvedChatId, message },
@@ -224,13 +218,38 @@ export default function Chat({ currentUser }) {
         });
     };
 
+    const deletePrivateChat = () => {
+        if (!resolvedChatId || activeChat?.type !== "private") return;
+        if (!window.confirm("Удалить этот чат только у вас? История до этого момента больше не будет показана.")) return;
+
+        getSocket()?.emit("chat:delete", { chatId: resolvedChatId });
+    };
+
+    const blockActiveContact = async () => {
+        if (!activeUser?.id || activeChat?.type !== "private") return;
+        if (!window.confirm("Добавить пользователя в чёрный список? Личные сообщения и звонки станут недоступны.")) return;
+        await block(activeUser.id);
+        dispatch({ type: "DELETE_PRIVATE_CHAT", payload: { chatId: resolvedChatId } });
+    };
+
+    useEffect(() => {
+        if (!requestedCallType || !resolvedChatId || !activeChatUserId || activeChatUserId.startsWith("group-")) return;
+        const requestKey = `${activeChatUserId}:${requestedCallType}`;
+        if (requestedCallRef.current === requestKey) return;
+        requestedCallRef.current = requestKey;
+        startCallFromChat(requestedCallType);
+        navigate("/chat", { replace: true });
+    }, [activeChatUserId, navigate, requestedCallType, resolvedChatId]);
+
     return (
         <div className="chat-main">
             <DialogList
                 className={activeChatUserId ? "hidden-mobile" : ""}
                 currentUserId={currentUser.id}
                 users={users.filter((user) => user.id !== currentUser.id)}
+                blockedIds={blockedIds}
                 chats={chats}
+                advertisementSummaries={advertisementSummaries}
                 activeUserId={activeChatUserId}
                 onSelect={(userId) => {
                     stopTyping();
@@ -269,6 +288,11 @@ export default function Chat({ currentUser }) {
                 onTypingStop={stopTyping}
                 onLoadOlderMessages={loadOlderMessages}
                 onStartCall={startCallFromChat}
+                onDeleteChat={deletePrivateChat}
+                isContactBlocked={Boolean(activeUser?.id && blockedIds.has(activeUser.id))}
+                onBlockContact={blockActiveContact}
+                onUnblockContact={() => activeUser?.id && unblock(activeUser.id)}
+                initialCall={location.state?.acceptedCall ?? null}
             />
 
         </div>

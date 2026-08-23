@@ -4,6 +4,7 @@ import { onlineUsers } from "../store/onlineUsers.js";
 import { CALL_MEMORY_FALLBACK_ENABLED } from "../config/runtimeFlags.js";
 import { getCallById, listCallsByChatId, upsertCall } from "../store/calls.js";
 import { getOrCreatePrivateChat } from "../store/chatHelpers.js";
+import { isPrivateContactUnavailable } from "../contacts/userBlockService.js";
 
 const RING_TIMEOUT_MS = 40_000;
 const STALE_CALL_GRACE_MS = 5_000;
@@ -300,6 +301,16 @@ export function callSocket(io, socket) {
                 emitCallError(socket, {
                     code: "FORBIDDEN_CHAT_ACCESS",
                     message: "No access to chat",
+                    chatId,
+                });
+                return;
+            }
+            const otherUserId = memberIds.find((id) => id !== socket.data.userId);
+            if (chatId.startsWith("room-") && memberIds.length === 2
+                && await isPrivateContactUnavailable(prisma, socket.data.userId, otherUserId)) {
+                emitCallError(socket, {
+                    code: "CONTACT_UNAVAILABLE",
+                    message: "Пользователь сейчас недоступен",
                     chatId,
                 });
                 return;

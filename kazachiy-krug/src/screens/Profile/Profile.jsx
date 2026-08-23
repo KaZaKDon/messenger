@@ -1,20 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { API_BASE_URL } from "../../shared/config";
+import { PROFILE_FIELDS, profileDetails } from "./profileFields";
 import "./Profile.css";
 
-const FIELD_CONFIG = {
-    phone: { label: "Телефон", placeholder: "+7 900 700 00 00" },
-    region: { label: "Регион", placeholder: "Ростов-на-Дону" },
-    occupation: { label: "Занятие", placeholder: "Торговец" },
-};
+const DEFAULT_DETAILS = profileDetails();
 
-const DEFAULT_DETAILS = {
-    phone: "+7 900 700 00 00",
-    region: "Ростов-на-Дону",
-    occupation: "Торговец",
-};
+const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
+const AVATAR_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
-export default function Profile({ currentUser }) {
+export default function Profile({ currentUser, setCurrentUser }) {
     const userName = currentUser?.login ?? currentUser?.name ?? "Казак61";
     const fullName = useMemo(() => {
         if (!currentUser?.name) return "Дима Кузнецов";
@@ -24,6 +18,11 @@ export default function Profile({ currentUser }) {
     const [details, setDetails] = useState(DEFAULT_DETAILS);
     const [editingField, setEditingField] = useState(null);
     const [draftValue, setDraftValue] = useState("");
+    const [avatar, setAvatar] = useState(currentUser?.avatar ?? null);
+    const [avatarBusy, setAvatarBusy] = useState(false);
+    const [avatarError, setAvatarError] = useState("");
+
+    const authHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem("accessToken") || ""}` });
 
     useEffect(() => {
         let active = true;
@@ -33,7 +32,7 @@ export default function Profile({ currentUser }) {
             if (!userId) return;
 
             try {
-                const response = await fetch(`${API_BASE_URL}/me?userId=${encodeURIComponent(userId)}`);
+                const response = await fetch(`${API_BASE_URL}/me`, { headers: authHeaders() });
 
                 if (!response.ok) {
                     throw new Error(`Failed to load profile (${response.status})`);
@@ -43,11 +42,8 @@ export default function Profile({ currentUser }) {
 
                 if (!active) return;
 
-                setDetails({
-                    phone: profile.phone ?? DEFAULT_DETAILS.phone,
-                    region: profile.region ?? DEFAULT_DETAILS.region,
-                    occupation: profile.occupation ?? DEFAULT_DETAILS.occupation,
-                });
+                setDetails(profileDetails(profile));
+                setAvatar(profile.avatar ?? null);
             } catch (error) {
                 console.error("Failed to load profile:", error);
             }
@@ -85,9 +81,9 @@ export default function Profile({ currentUser }) {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",
+                    ...authHeaders(),
                 },
                 body: JSON.stringify({
-                    userId: currentUser.id,
                     [editingField]: nextValue,
                 }),
             });
@@ -98,11 +94,7 @@ export default function Profile({ currentUser }) {
 
             const profile = await response.json();
 
-            setDetails({
-                phone: profile.phone ?? nextDetails.phone,
-                region: profile.region ?? nextDetails.region,
-                occupation: profile.occupation ?? nextDetails.occupation,
-            });
+            setDetails(profileDetails(profile));
         } catch (error) {
             console.error("Failed to save profile:", error);
             setDetails(previousDetails);
@@ -110,6 +102,57 @@ export default function Profile({ currentUser }) {
 
         setEditingField(null);
         setDraftValue("");
+    };
+
+    const updateStoredAvatar = (nextAvatar) => {
+        setAvatar(nextAvatar);
+        setCurrentUser?.((user) => user ? { ...user, avatar: nextAvatar } : user);
+    };
+
+    const uploadAvatar = async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file) return;
+        if (!AVATAR_TYPES.has(file.type)) return setAvatarError("Разрешены только JPG, PNG и WebP");
+        if (file.size > MAX_AVATAR_SIZE) return setAvatarError("Размер изображения не должен превышать 5 МБ");
+
+        setAvatarBusy(true);
+        setAvatarError("");
+        try {
+            const form = new FormData();
+            form.append("avatar", file);
+            const response = await fetch(`${API_BASE_URL}/me/avatar`, {
+                method: "POST",
+                headers: authHeaders(),
+                body: form,
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.error || "Не удалось загрузить аватар");
+            updateStoredAvatar(payload.user?.avatar ?? null);
+        } catch (error) {
+            setAvatarError(error.message);
+        } finally {
+            setAvatarBusy(false);
+        }
+    };
+
+    const deleteAvatar = async () => {
+        if (!avatar || !window.confirm("Удалить фотографию профиля?")) return;
+        setAvatarBusy(true);
+        setAvatarError("");
+        try {
+            const response = await fetch(`${API_BASE_URL}/me/avatar`, {
+                method: "DELETE",
+                headers: authHeaders(),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.error || "Не удалось удалить аватар");
+            updateStoredAvatar(null);
+        } catch (error) {
+            setAvatarError(error.message);
+        } finally {
+            setAvatarBusy(false);
+        }
     };
 
 
@@ -122,9 +165,18 @@ export default function Profile({ currentUser }) {
             <div className="profile-card">
                 <div className="profile-top">
                     <div className="profile-avatar">
-                        {currentUser?.avatar
-                            ? <img src={currentUser.avatar} alt="Аватар" />
+                        {avatar
+                            ? <img src={avatar} alt="Аватар" />
                             : userName.slice(0, 1).toUpperCase()}
+                    </div>
+                    <div className="profile-avatar-controls">
+                        <label className="profile-avatar-button">
+                            {avatarBusy ? "Загрузка..." : (avatar ? "Заменить фото" : "Добавить фото")}
+                            <input type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadAvatar} disabled={avatarBusy} />
+                        </label>
+                        {avatar ? <button type="button" onClick={deleteAvatar} disabled={avatarBusy}>Удалить</button> : null}
+                        <small>JPG, PNG или WebP, не более 5 МБ</small>
+                        {avatarError ? <span className="profile-avatar-error">{avatarError}</span> : null}
                     </div>
                     <div className="profile-main-info">
                         <h2>{userName}</h2>
@@ -135,7 +187,7 @@ export default function Profile({ currentUser }) {
                 </div>
 
                 <div className="profile-detail-list">
-                    {Object.entries(FIELD_CONFIG).map(([field, config]) => (
+                    {Object.entries(PROFILE_FIELDS).map(([field, config]) => (
                         <div className="profile-detail-row" key={field}>
                             <span className="profile-detail-label">{config.label}</span>
 

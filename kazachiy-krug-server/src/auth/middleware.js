@@ -6,10 +6,3 @@ export async function requireAuth(req, res, next) {
     req.auth = auth;
     return next();
 }
-
-export function requireAdmin(req, res, next) {
-    if (req.auth?.user?.role !== "admin") {
-        return res.status(403).json({ error: "Недостаточно прав" });
-    }
-    return next();
-}

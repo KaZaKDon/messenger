@@ -10,6 +10,10 @@ import {
 import {
     SOCKET_MEMORY_FALLBACK_ENABLED
 } from "../config/runtimeFlags.js";
+import { GROUP_RULES } from "../store/groupPolicy.js";
+import { getGroupCapabilities } from "../groups/groupAccessPolicy.js";
+import { findGroupRuleForAccess } from "../groups/groupAccessRepository.js";
+import { isPrivateContactUnavailable } from "../contacts/userBlockService.js";
 
 function isGroupId(id) {
     return typeof id === "string" && id.startsWith("group-");
@@ -27,15 +31,21 @@ function deliverToOnlineMembers(io, senderUserId, memberIds, eventName, payload)
         io.to(sid).emit(eventName, payload);
     }
 }
-async function getChatContextDb(chatId, userId) {
+function socketUser(socket) {
+    return socket.data.user ?? {
+        id: socket.data.userId,
+        role: "user",
+    };
+}
+
+function isChatMember(chat, userId) {
+    return chat?.members?.some((member) => member.userId === userId) ?? false;
+}
+
+async function getChatContextDb(chatId) {
     return prisma.chat.findFirst({
         where: {
             id: chatId,
-            members: {
-                some: {
-                    userId,
-                },
-            },
         },
         select: {
             id: true,
@@ -49,51 +59,49 @@ async function getChatContextDb(chatId, userId) {
     });
 }
 
-async function getChatMemberIdsDb(chatId, userId) {
-    const chat = await prisma.chat.findFirst({
-        where: {
-            id: chatId,
-            members: {
-                some: {
-                    userId,
-                },
-            },
-        },
-        select: {
-            members: {
-                select: {
-                    userId: true,
-                },
-            },
-        },
-    });
+async function getAccessibleChatContextDb(chatId, socket) {
+    const chat = await getChatContextDb(chatId);
+    if (!chat) return null;
 
-    return chat?.members?.map((member) => member.userId) ?? null;
-}
-
-async function getGroupRuleDb(chatId) {
-    return prisma.groupRule.findUnique({
-        where: { chatId },
-        select: {
-            mode: true,
-            requiresAnnouncementWithImage: true,
-            publishUserIds: true,
-        },
-    });
-}
-
-function canPublishToGroupByRule(rule, userId) {
-    if (!rule) return true;
-
-    if (Array.isArray(rule.publishUserIds) && rule.publishUserIds.length > 0) {
-        return rule.publishUserIds.includes(userId);
+    const isMember = isChatMember(chat, socket.data.userId);
+    if (chat.type !== "group") {
+        return isMember ? { chat, rule: null, capabilities: null } : null;
     }
 
+    const rule = await findGroupRuleForAccess(prisma, chatId);
+    const capabilities = getGroupCapabilities({
+        rule,
+        user: socketUser(socket),
+        isMember,
+    });
 
-    if (rule.mode === "chat") return true;
-    if (rule.mode === "announcements") return true;
+    return capabilities.canView ? { chat, rule, capabilities } : null;
+}
 
-    return false;
+function emitToChatPeers(io, socket, chat, eventName, payload) {
+    if (chat.type === "group" && socket.broadcast?.to) {
+        socket.broadcast.to(chat.id).emit(eventName, payload);
+        return;
+    }
+
+    const memberIds = chat.members.map((member) => member.userId);
+    deliverToOnlineMembers(io, socket.data.userId, memberIds, eventName, payload);
+}
+
+function getMemoryChatCapabilities(chat, socket) {
+    const isMember = chat.members.includes(socket.data.userId);
+    if (chat.type !== "group") {
+        return {
+            canView: isMember,
+            canPublish: isMember,
+        };
+    }
+
+    return getGroupCapabilities({
+        rule: GROUP_RULES[chat.id] ?? null,
+        user: socketUser(socket),
+        isMember,
+    });
 }
 
 function getLegacyImageUrls(message) {
@@ -320,7 +328,8 @@ function runMessageSendMemory(io, socket, message) {
         return;
     }
 
-    if (!chat.members.includes(socket.data.userId)) {
+    const capabilities = getMemoryChatCapabilities(chat, socket);
+    if (!capabilities.canView) {
         console.log("⛔ drop: sender not member", {
             chatId,
             userId: socket.data.userId
@@ -335,7 +344,26 @@ function runMessageSendMemory(io, socket, message) {
     }
 
     if (chat.type === "group") {
-        // memory fallback: не применяем store-based group policy
+        const rule = GROUP_RULES[chatId] ?? null;
+
+        if (!capabilities.canPublish) {
+            socket.emit("message:error", {
+                chatId,
+                messageId: message?.id,
+                reason: "У вас нет прав на публикацию в этой группе.",
+            });
+            return;
+        }
+
+        const validation = validateGroupMessageByRule(rule, message);
+        if (!validation.ok) {
+            socket.emit("message:error", {
+                chatId,
+                messageId: message?.id,
+                reason: validation.reason,
+            });
+            return;
+        }
     }
 
     const normalizedMessage = normalizeMessagePayload(message);
@@ -357,7 +385,7 @@ function runMessageSendMemory(io, socket, message) {
 
     console.log(`📩 [${chatId}] ${socket.data.userName}: ${serverMessage.text ?? ""}`);
 
-    deliverToOnlineMembers(io, socket.data.userId, chat.members, "message:new", serverMessage);
+    emitToChatPeers(io, socket, chat, "message:new", serverMessage);
     socket.emit("message:delivered", {
         chatId,
         messageId: serverMessage.id
@@ -369,14 +397,14 @@ function runMessageReadMemory(io, socket, chatId, messageId) {
     if (!chat && isGroupId(chatId)) chat = ensureGroupChatExists(chatId);
     if (!chat) return;
 
-    if (!chat.members.includes(socket.data.userId)) return;
+    if (!getMemoryChatCapabilities(chat, socket).canView) return;
 
     const msg = chat.messages.find((m) => m.id === messageId);
     if (!msg || msg.senderId === socket.data.userId) return;
 
     msg.status = "read";
 
-    deliverToOnlineMembers(io, socket.data.userId, chat.members, "message:read", {
+    emitToChatPeers(io, socket, chat, "message:read", {
         chatId,
         messageId
     });
@@ -398,8 +426,8 @@ export function messageSocket(io, socket) {
         if (!chatId) return;
 
         try {
-            const chat = await getChatContextDb(chatId, socket.data.userId);
-            if (!chat) {
+            const accessContext = await getAccessibleChatContextDb(chatId, socket);
+            if (!accessContext) {
                 socket.emit("message:error", {
                     chatId,
                     messageId: message?.id,
@@ -408,10 +436,22 @@ export function messageSocket(io, socket) {
                 return;
             }
 
-            if (chat.type === "group") {
-                const rule = await getGroupRuleDb(chatId);
+            const { chat, rule, capabilities } = accessContext;
 
-                if (!canPublishToGroupByRule(rule, socket.data.userId)) {
+            if (chat.type === "private") {
+                const otherUserId = chat.members.find((member) => member.userId !== socket.data.userId)?.userId;
+                if (await isPrivateContactUnavailable(prisma, socket.data.userId, otherUserId)) {
+                    socket.emit("message:error", {
+                        chatId,
+                        messageId: message?.id,
+                        reason: "Пользователь сейчас недоступен",
+                    });
+                    return;
+                }
+            }
+
+            if (chat.type === "group") {
+                if (!capabilities.canPublish) {
                     socket.emit("message:error", {
                         chatId,
                         messageId: message?.id,
@@ -431,6 +471,15 @@ export function messageSocket(io, socket) {
                 }
             }
             const normalizedMessage = normalizeMessagePayload(message);
+            const hasVideo = hasAttachmentOfType(normalizedMessage.attachments, "video");
+            if (hasVideo && chat.type === "group" && chatId !== "group-12") {
+                socket.emit("message:error", {
+                    chatId,
+                    messageId: message?.id,
+                    reason: "Видео можно отправлять только в личных чатах и группе «Поболтаем».",
+                });
+                return;
+            }
             const { created, usedLegacySchema } = await createMessageDb({
                 chatId,
                 socket,
@@ -453,8 +502,7 @@ export function messageSocket(io, socket) {
             socket.emit("message:new", serverMessage);
             console.log(`📩 [${chatId}] ${socket.data.userName}: ${serverMessage.text ?? ""}`);
 
-            const memberIds = chat.members.map((member) => member.userId);
-            deliverToOnlineMembers(io, socket.data.userId, memberIds, "message:new", serverMessage);
+            emitToChatPeers(io, socket, chat, "message:new", serverMessage);
 
             socket.emit("message:delivered", {
                 chatId,
@@ -483,8 +531,9 @@ export function messageSocket(io, socket) {
         if (!chatId || !messageId) return;
 
         try {
-            const chat = await getChatContextDb(chatId, socket.data.userId);
-            if (!chat) return;
+            const accessContext = await getAccessibleChatContextDb(chatId, socket);
+            if (!accessContext) return;
+            const { chat } = accessContext;
 
             const msg = await prisma.message.findUnique({
                 where: {
@@ -514,8 +563,7 @@ export function messageSocket(io, socket) {
                 const memoryMsg = chats[chatId].messages.find((m) => m.id === messageId);
                 if (memoryMsg) memoryMsg.status = "read";
             }
-            const memberIds = chat.members.map((member) => member.userId);
-            deliverToOnlineMembers(io, socket.data.userId, memberIds, "message:read", {
+            emitToChatPeers(io, socket, chat, "message:read", {
                 chatId,
                 messageId
             });
@@ -542,18 +590,13 @@ export function messageSocket(io, socket) {
 
 
         try {
-            const memberIds = await getChatMemberIdsDb(chatId, socket.data.userId);
-            if (!memberIds) return;
+            const accessContext = await getAccessibleChatContextDb(chatId, socket);
+            if (!accessContext) return;
 
-            for (const memberId of memberIds) {
-                if (memberId === socket.data.userId) continue;
-                const sid = onlineUsers.get(memberId);
-                if (!sid) continue;
-                io.to(sid).emit("typing:start", {
-                    chatId,
-                    userId: socket.data.userId
-                });
-            }
+            emitToChatPeers(io, socket, accessContext.chat, "typing:start", {
+                chatId,
+                userId: socket.data.userId
+            });
         } catch (error) {
             console.error("typing:start db failed, fallback to memory:", error?.message ?? error);
             if (!SOCKET_MEMORY_FALLBACK_ENABLED) return;
@@ -561,17 +604,12 @@ export function messageSocket(io, socket) {
             let chat = chats[chatId];
             if (!chat && isGroupId(chatId)) chat = ensureGroupChatExists(chatId);
             if (!chat) return;
-            if (!chat.members.includes(socket.data.userId)) return;
+            if (!getMemoryChatCapabilities(chat, socket).canView) return;
 
-            for (const memberId of chat.members) {
-                if (memberId === socket.data.userId) continue;
-                const sid = onlineUsers.get(memberId);
-                if (!sid) continue;
-                io.to(sid).emit("typing:start", {
-                    chatId,
-                    userId: socket.data.userId
-                });
-            }
+            emitToChatPeers(io, socket, chat, "typing:start", {
+                chatId,
+                userId: socket.data.userId
+            });
         }
     });
 
@@ -583,18 +621,13 @@ export function messageSocket(io, socket) {
 
 
         try {
-            const memberIds = await getChatMemberIdsDb(chatId, socket.data.userId);
-            if (!memberIds) return;
+            const accessContext = await getAccessibleChatContextDb(chatId, socket);
+            if (!accessContext) return;
 
-            for (const memberId of memberIds) {
-                if (memberId === socket.data.userId) continue;
-                const sid = onlineUsers.get(memberId);
-                if (!sid) continue;
-                io.to(sid).emit("typing:stop", {
-                    chatId,
-                    userId: socket.data.userId
-                });
-            }
+            emitToChatPeers(io, socket, accessContext.chat, "typing:stop", {
+                chatId,
+                userId: socket.data.userId
+            });
         } catch (error) {
             console.error("typing:stop db failed, fallback to memory:", error?.message ?? error);
 
@@ -604,17 +637,12 @@ export function messageSocket(io, socket) {
             let chat = chats[chatId];
             if (!chat && isGroupId(chatId)) chat = ensureGroupChatExists(chatId);
             if (!chat) return;
-            if (!chat.members.includes(socket.data.userId)) return;
+            if (!getMemoryChatCapabilities(chat, socket).canView) return;
 
-            for (const memberId of chat.members) {
-                if (memberId === socket.data.userId) continue;
-                const sid = onlineUsers.get(memberId);
-                if (!sid) continue;
-                io.to(sid).emit("typing:stop", {
-                    chatId,
-                    userId: socket.data.userId
-                });
-            }
+            emitToChatPeers(io, socket, chat, "typing:stop", {
+                chatId,
+                userId: socket.data.userId
+            });
 
         }
     });

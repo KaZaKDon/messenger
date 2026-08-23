@@ -9,3 +9,10 @@ body {
     background: var(--bg-main);
     color: var(--color-primary);
 }
+
+html,
+body,
+#root,
+.app {
+    min-height: 100%;
+}

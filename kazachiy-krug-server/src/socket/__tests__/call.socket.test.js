@@ -4,6 +4,13 @@ import assert from "node:assert/strict";
 import { callSocket } from "../call.socket.js";
 import { prisma } from "../../db/prisma.js";
 
+let originalUserBlockFindFirst;
+test.beforeEach(() => {
+    originalUserBlockFindFirst = prisma.userBlock.findFirst;
+    prisma.userBlock.findFirst = async () => null;
+});
+test.afterEach(() => { prisma.userBlock.findFirst = originalUserBlockFindFirst; });
+
 function createFakeSocket(userId = "user-1") {
     return {
         data: {

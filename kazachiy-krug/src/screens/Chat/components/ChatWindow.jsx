@@ -9,6 +9,9 @@ import AnnouncementComposer from "./AnnouncementComposer";
 import AnnouncementCard from "./AnnouncementCard";
 import { connectSocket, getSocket } from "/src/shared/socket";
 import { API_BASE_URL } from "../../../shared/config";
+import { createAdvertisement, fetchAdvertisements } from "../../../shared/advertisementsApi";
+import { acquireCallMedia } from "../../../shared/callMedia";
+import { scheduleLatestViewport } from "../chatViewport";
 
 const VOICE_MIME_CANDIDATES = [
     "audio/webm;codecs=opus",
@@ -16,13 +19,6 @@ const VOICE_MIME_CANDIDATES = [
     "audio/ogg;codecs=opus",
     "audio/ogg",
 ];
-const CALL_AUDIO_CONSTRAINTS = {
-    audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-    },
-};
 const DEFAULT_ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
 const CALL_DEBUG_ENABLED = import.meta.env.VITE_CALL_DEBUG === "1";
 
@@ -118,14 +114,21 @@ export default function ChatWindow({
     onWriteToAuthor, // ✅ новый колбэк
     onLoadOlderMessages,
     onStartCall,
+    onDeleteChat,
+    isContactBlocked = false,
+    onBlockContact,
+    onUnblockContact,
+    initialCall = null,
     className = "",
     onBackToList,
 
 }) {
     const endRef = useRef(null);
+    const messagesViewportRef = useRef(null);
     const typingRef = useRef(false);
     const stopTypingTimeout = useRef(null);
     const autoLoadThrottleRef = useRef(0);
+    const scheduledLatestScrollRef = useRef(null);
     const prevMessagesMetaRef = useRef({
         chatId: null,
         firstId: null,
@@ -142,23 +145,78 @@ export default function ChatWindow({
     const [callOverlayError, setCallOverlayError] = useState("");
     const [callElapsedSec, setCallElapsedSec] = useState(0);
     const [callMicMuted, setCallMicMuted] = useState(false);
+    const [callCameraEnabled, setCallCameraEnabled] = useState(true);
+    const [callSpeakerMuted, setCallSpeakerMuted] = useState(false);
+    const [callCameraNotice, setCallCameraNotice] = useState("");
     const [peerConnectionState, setPeerConnectionState] = useState("new");
     const [iceConnectionState, setIceConnectionState] = useState("new");
     const peerConnectionRef = useRef(null);
     const callLocalStreamRef = useRef(null);
+    const callLocalStreamPromiseRef = useRef(null);
     const remoteAudioRef = useRef(null);
+    const localVideoRef = useRef(null);
+    const remoteVideoRef = useRef(null);
     const offerSentForCallRef = useRef(null);
     const iceServersRef = useRef(resolveIceServers());
     const ringtoneAudioContextRef = useRef(null);
     const ringtoneTimerRef = useRef(null);
+    const initialCallAppliedRef = useRef(null);
+    const autoAcceptedCallRef = useRef(null);
+
+    const ensureCallLocalStream = useCallback(async (callType) => {
+        if (callLocalStreamRef.current) return callLocalStreamRef.current;
+        if (callLocalStreamPromiseRef.current) return callLocalStreamPromiseRef.current;
+
+        callLocalStreamPromiseRef.current = acquireCallMedia(
+            callType,
+            navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices)
+        ).then((media) => {
+            const stream = media.stream;
+            setCallCameraNotice(media.videoError ? "Камера занята или недоступна. Звонок продолжен со звуком." : "");
+            callLocalStreamRef.current = stream;
+            stream.getAudioTracks().forEach((track) => {
+                track.enabled = !callMicMuted;
+            });
+            stream.getVideoTracks().forEach((track) => {
+                track.enabled = callCameraEnabled;
+            });
+            if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+            return stream;
+        }).catch((error) => {
+            callLocalStreamPromiseRef.current = null;
+            throw error;
+        });
+
+        return callLocalStreamPromiseRef.current;
+    }, [callCameraEnabled, callMicMuted]);
 
     // ✅ режим для групп 4–10: FEED (по умолчанию) / CREATE (форма)
     const [announcementMode, setAnnouncementMode] = useState("feed"); // "feed" | "create"
+    const [advertisements, setAdvertisements] = useState([]);
+    const [advertisementsLoading, setAdvertisementsLoading] = useState(false);
+    const [advertisementsError, setAdvertisementsError] = useState("");
+
+    const scrollToLatest = useCallback((behavior = "auto") => {
+        scheduledLatestScrollRef.current?.();
+        scheduledLatestScrollRef.current = scheduleLatestViewport({
+            getViewport: () => messagesViewportRef.current,
+            behavior,
+        });
+    }, []);
+
+    useEffect(() => () => scheduledLatestScrollRef.current?.(), []);
 
     useEffect(() => {
         // при смене чата всегда возвращаемся на ленту
         setAnnouncementMode("feed");
     }, [chat?.id]);
+
+    useEffect(() => {
+        if (!initialCall?.callId || initialCallAppliedRef.current === initialCall.callId) return;
+        if (chat?.id && initialCall.chatId && chat.id !== initialCall.chatId) return;
+        initialCallAppliedRef.current = initialCall.callId;
+        setActiveCall(initialCall);
+    }, [chat?.id, initialCall]);
 
     useEffect(() => {
         if (!currentUserId) {
@@ -250,13 +308,7 @@ export default function ChatWindow({
             if (!socket) return;
 
             const ensureLocalStream = async () => {
-                if (callLocalStreamRef.current) return callLocalStreamRef.current;
-                const stream = await navigator.mediaDevices.getUserMedia(CALL_AUDIO_CONSTRAINTS);
-                callLocalStreamRef.current = stream;
-                stream.getAudioTracks().forEach((track) => {
-                    track.enabled = !callMicMuted;
-                });
-                return stream;
+                return ensureCallLocalStream(activeCall.type);
             };
 
             const ensurePeerConnection = async () => {
@@ -287,9 +339,15 @@ export default function ChatWindow({
 
                 pc.ontrack = (event) => {
                     const [remoteStream] = event.streams;
-                    if (!remoteStream || !remoteAudioRef.current) return;
-                    remoteAudioRef.current.srcObject = remoteStream;
-                    remoteAudioRef.current.play().catch(() => {});
+                    if (!remoteStream) return;
+                    if (remoteAudioRef.current) {
+                        remoteAudioRef.current.srcObject = remoteStream;
+                        remoteAudioRef.current.play().catch(() => {});
+                    }
+                    if (remoteVideoRef.current) {
+                        remoteVideoRef.current.srcObject = remoteStream;
+                        remoteVideoRef.current.play().catch(() => {});
+                    }
                 };
 
                 const localStream = await ensureLocalStream();
@@ -311,7 +369,7 @@ export default function ChatWindow({
                 }
             } catch (error) {
                 console.error("call:signal processing failed:", error);
-                setCallOverlayError("Не удалось установить аудиосоединение.");
+                setCallOverlayError("Не удалось установить соединение.");
             }
         };
 
@@ -334,12 +392,23 @@ export default function ChatWindow({
             socket.off("call:error", onCallError);
             socket.off("call:signal", onCallSignal);
         };
-    }, [activeCall, callMicMuted, chat?.id, currentUserId]);
+    }, [activeCall, callCameraEnabled, callMicMuted, chat?.id, currentUserId, ensureCallLocalStream]);
+
+    useEffect(() => {
+        if (!activeCall?.autoAccept || activeCall.status !== "ringing" || !activeCall.callId) return undefined;
+        if (autoAcceptedCallRef.current === activeCall.callId) return undefined;
+        autoAcceptedCallRef.current = activeCall.callId;
+
+        const timer = setTimeout(() => {
+            connectSocket()?.emit("call:accept", { callId: activeCall.callId });
+        }, 0);
+        return () => clearTimeout(timer);
+    }, [activeCall]);
 
     useEffect(() => {
         if (!activeCall || activeCall.status !== "connected") return undefined;
         if (!navigator.mediaDevices?.getUserMedia || typeof RTCPeerConnection === "undefined") {
-            setCallOverlayError("Браузер не поддерживает аудиозвонки.");
+            setCallOverlayError("Браузер не поддерживает звонки.");
             return undefined;
         }
 
@@ -348,14 +417,8 @@ export default function ChatWindow({
         let cancelled = false;
 
         const ensureLocalStream = async () => {
-            if (callLocalStreamRef.current) return callLocalStreamRef.current;
-                const stream = await navigator.mediaDevices.getUserMedia(CALL_AUDIO_CONSTRAINTS);
-                callLocalStreamRef.current = stream;
-                stream.getAudioTracks().forEach((track) => {
-                    track.enabled = !callMicMuted;
-                });
-                return stream;
-            };
+            return ensureCallLocalStream(activeCall.type);
+        };
 
         const ensurePeerConnection = async () => {
             if (peerConnectionRef.current) return peerConnectionRef.current;
@@ -385,9 +448,15 @@ export default function ChatWindow({
 
             pc.ontrack = (event) => {
                 const [remoteStream] = event.streams;
-                if (!remoteStream || !remoteAudioRef.current) return;
-                remoteAudioRef.current.srcObject = remoteStream;
-                remoteAudioRef.current.play().catch(() => {});
+                if (!remoteStream) return;
+                if (remoteAudioRef.current) {
+                    remoteAudioRef.current.srcObject = remoteStream;
+                    remoteAudioRef.current.play().catch(() => {});
+                }
+                if (remoteVideoRef.current) {
+                    remoteVideoRef.current.srcObject = remoteStream;
+                    remoteVideoRef.current.play().catch(() => {});
+                }
             };
 
             const localStream = await ensureLocalStream();
@@ -412,7 +481,9 @@ export default function ChatWindow({
                 offerSentForCallRef.current = activeCall.callId;
             } catch (error) {
                 console.error("call bootstrap failed:", error);
-                setCallOverlayError("Не удалось получить доступ к микрофону для звонка.");
+                setCallOverlayError(activeCall.type === "video"
+                    ? "Не удалось получить доступ к камере или микрофону."
+                    : "Не удалось получить доступ к микрофону для звонка.");
             }
         };
 
@@ -424,7 +495,7 @@ export default function ChatWindow({
                 offerSentForCallRef.current = null;
             }
         };
-    }, [activeCall, callMicMuted, currentUserId]);
+    }, [activeCall, callCameraEnabled, callMicMuted, currentUserId, ensureCallLocalStream]);
 
     useEffect(() => {
         if (!callLocalStreamRef.current) return;
@@ -432,6 +503,17 @@ export default function ChatWindow({
             track.enabled = !callMicMuted;
         });
     }, [callMicMuted]);
+
+    useEffect(() => {
+        if (!callLocalStreamRef.current) return;
+        callLocalStreamRef.current.getVideoTracks().forEach((track) => {
+            track.enabled = callCameraEnabled;
+        });
+    }, [callCameraEnabled]);
+
+    useEffect(() => {
+        if (remoteAudioRef.current) remoteAudioRef.current.muted = callSpeakerMuted;
+    }, [callSpeakerMuted]);
 
     useEffect(() => {
         const stopRingtone = () => {
@@ -495,11 +577,17 @@ export default function ChatWindow({
             callLocalStreamRef.current.getTracks().forEach((track) => track.stop());
             callLocalStreamRef.current = null;
         }
+        callLocalStreamPromiseRef.current = null;
         if (remoteAudioRef.current) {
             remoteAudioRef.current.srcObject = null;
         }
+        if (localVideoRef.current) localVideoRef.current.srcObject = null;
+        if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
         offerSentForCallRef.current = null;
         setCallMicMuted(false);
+        setCallCameraEnabled(true);
+        setCallSpeakerMuted(false);
+        setCallCameraNotice("");
         setPeerConnectionState("new");
         setIceConnectionState("new");
         return undefined;
@@ -544,10 +632,10 @@ export default function ChatWindow({
         [chat, onDraftChange]
     );
 
-    // ✅ image upload UI (обычный чат)
+    // ✅ image/video upload UI (обычный чат)
     const fileInputRef = useRef(null);
-    const [selectedImageFile, setSelectedImageFile] = useState(null);
-    const [selectedImagePreview, setSelectedImagePreview] = useState(null);
+    const [selectedMediaFile, setSelectedMediaFile] = useState(null);
+    const [selectedMediaPreview, setSelectedMediaPreview] = useState(null);
     const [uploading, setUploading] = useState(false);
 
     const mediaRecorderRef = useRef(null);
@@ -580,40 +668,46 @@ export default function ChatWindow({
         setVoiceDurationMs(0);
     }, []);
 
-    const clearSelectedImage = useCallback(() => {
-        setSelectedImageFile(null);
-        setSelectedImagePreview((prev) => {
+    const clearSelectedMedia = useCallback(() => {
+        setSelectedMediaFile(null);
+        setSelectedMediaPreview((prev) => {
             if (prev) URL.revokeObjectURL(prev);
             return null;
         });
     }, []);
 
-    const onPickImage = useCallback(
+    const onPickMedia = useCallback(
         (event) => {
             const file = event.target.files?.[0];
             if (!file) return;
 
-            if (!file.type?.startsWith("image/")) return;
+            const isImage = file.type?.startsWith("image/");
+            const isVideo = file.type === "video/mp4" || file.type === "video/webm";
+            if (!isImage && !isVideo) {
+                alert("Можно выбрать картинку, MP4 или WebM видео.");
+                return;
+            }
 
-            if (file.size > 5 * 1024 * 1024) {
-                alert("Файл слишком большой. Максимум 5MB.");
+            const maxBytes = isVideo ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
+            if (file.size > maxBytes) {
+                alert(`Файл слишком большой. Максимум ${isVideo ? 50 : 5} МБ.`);
                 return;
             }
 
             event.target.value = "";
 
-            clearSelectedImage();
-            setSelectedImageFile(file);
-            setSelectedImagePreview(URL.createObjectURL(file));
+            clearSelectedMedia();
+            setSelectedMediaFile(file);
+            setSelectedMediaPreview(URL.createObjectURL(file));
         },
-        [clearSelectedImage]
+        [clearSelectedMedia]
     );
 
-    async function uploadSelectedImage() {
-        if (!selectedImageFile) return null;
+    async function uploadSelectedMedia() {
+        if (!selectedMediaFile) return null;
 
         const fd = new FormData();
-        fd.append("file", selectedImageFile);
+        fd.append("file", selectedMediaFile);
 
         setUploading(true);
         try {
@@ -628,7 +722,7 @@ export default function ChatWindow({
             }
 
             const data = await res.json();
-            return data?.imageUrl ?? data?.fileUrl ?? null;
+            return data?.fileUrl ?? null;
         } finally {
             setUploading(false);
         }
@@ -669,7 +763,7 @@ export default function ChatWindow({
         }
 
         try {
-            clearSelectedImage();
+            clearSelectedMedia();
             clearRecordedVoice();
             voiceCancelRequestedRef.current = false;
             voiceChunksRef.current = [];
@@ -724,7 +818,7 @@ export default function ChatWindow({
             setIsRecordingVoice(false);
             alert("Не удалось включить микрофон. Проверьте доступ к микрофону.");
         }
-    }, [clearRecordedVoice, clearSelectedImage, isRecordingVoice, stopVoiceTimer, stopVoiceTracks, uploading]);
+    }, [clearRecordedVoice, clearSelectedMedia, isRecordingVoice, stopVoiceTimer, stopVoiceTracks, uploading]);
 
     const stopVoiceRecording = useCallback(() => {
         if (!isRecordingVoice) return;
@@ -788,8 +882,8 @@ export default function ChatWindow({
             firstId !== prev.firstId &&
             lastId === prev.lastId;
 
-        if (!isHistoryPrepend && endRef.current) {
-            endRef.current.scrollIntoView({ block: "end", behavior: "smooth" });
+        if (!isHistoryPrepend && messagesViewportRef.current) {
+            scrollToLatest(sameChat ? "smooth" : "auto");
         }
 
         prevMessagesMetaRef.current = {
@@ -798,7 +892,7 @@ export default function ChatWindow({
             lastId,
             length: messages.length,
         };
-    }, [announcementMode, chat?.id, chat?.messages]);
+    }, [announcementMode, chat?.id, chat?.messages, scrollToLatest]);
 
 
     const stopTypingNow = useCallback(() => {
@@ -856,35 +950,35 @@ export default function ChatWindow({
         if (!chat || isRecordingVoice || recordedVoiceBlob) return;
 
         const text = (chat.draft ?? "").trim();
-        if (!text && !selectedImageFile) return;
+        if (!text && !selectedMediaFile) return;
 
-        let imageUrl = null;
+        let mediaUrl = null;
 
         try {
-            if (selectedImageFile) {
-                imageUrl = await uploadSelectedImage();
-                if (!imageUrl) {
-                    alert("Не удалось загрузить картинку.");
+            if (selectedMediaFile) {
+                mediaUrl = await uploadSelectedMedia();
+                if (!mediaUrl) {
+                    alert("Не удалось загрузить вложение.");
                     return;
                 }
             }
 
-            if (imageUrl?.startsWith("blob:")) {
+            if (mediaUrl?.startsWith("blob:")) {
                 alert("Файл не загрузился на сервер. Повтори отправку.");
                 return;
             }
 
-            if (imageUrl) {
+            if (mediaUrl) {
+                const mediaType = selectedMediaFile.type.startsWith("video/") ? "video" : "image";
                 onSend({ 
                     text,
                     type: "media",
-                    imageUrl,
                     attachments: [
                         {
-                            mediaType: "image",
-                            url: imageUrl,
-                            mimeType: selectedImageFile?.type || null,
-                            sizeBytes: selectedImageFile?.size ?? null,
+                            mediaType,
+                            url: mediaUrl,
+                            mimeType: selectedMediaFile?.type || null,
+                            sizeBytes: selectedMediaFile?.size ?? null,
                         },
                     ],
                 });
@@ -895,7 +989,7 @@ export default function ChatWindow({
             onDraftChange?.("");
             stopTypingNow();
             setEmojiOpen(false);
-            clearSelectedImage();
+            clearSelectedMedia();
         } catch (err) {
             console.error(err);
             alert("Ошибка при отправке. Проверь сервер /upload.");
@@ -905,8 +999,8 @@ export default function ChatWindow({
     const handleSendVoice = async () => {
         if (!chat || isRecordingVoice || !recordedVoiceBlob) return;
 
-        if (selectedImageFile) {
-            alert("Голосовое отправляется отдельно от картинки.");
+        if (selectedMediaFile) {
+            alert("Голосовое отправляется отдельно от вложения.");
             return;
         }
 
@@ -959,11 +1053,63 @@ export default function ChatWindow({
     const chatType = chat?.type ?? "private";
     const canUseComposer = !isRecordingVoice;
 
-    // ✅ круги-объявления: по id
-    const isAnnouncementGroup =
-        typeof chat?.id === "string" && /^group-(?:[4-9]|10)$/.test(chat.id);
+    const isAnnouncementGroup = chat?.contentType === "advertisement"
+        || (chat?.contentType == null && typeof chat?.id === "string" && /^group-(?:[2-9]|10)$/.test(chat.id));
 
-        const canPublish = chat?.canPublish !== false;
+    const canPublish = chat?.canPublish !== false;
+
+    const loadAdvertisements = useCallback(async () => {
+        if (!isAnnouncementGroup || !chat?.id) {
+            setAdvertisements([]);
+            return;
+        }
+        setAdvertisementsLoading(true);
+        setAdvertisementsError("");
+        try {
+            const items = await fetchAdvertisements(chat.id);
+            setAdvertisements([...items].sort((a, b) => {
+                const aTime = new Date(a?.publishedAt ?? a?.createdAt ?? 0).getTime();
+                const bTime = new Date(b?.publishedAt ?? b?.createdAt ?? 0).getTime();
+                return aTime - bTime;
+            }));
+        } catch (error) {
+            setAdvertisementsError(error?.message ?? "Не удалось загрузить объявления");
+        } finally {
+            setAdvertisementsLoading(false);
+        }
+    }, [chat?.id, isAnnouncementGroup]);
+
+    useEffect(() => {
+        loadAdvertisements();
+    }, [loadAdvertisements]);
+
+    useEffect(() => {
+        if (!isAnnouncementGroup || announcementMode !== "feed" || advertisementsLoading) return;
+        scrollToLatest("auto");
+    }, [advertisements.length, advertisementsLoading, announcementMode, chat?.id, isAnnouncementGroup, scrollToLatest]);
+
+    useEffect(() => {
+        if (!isAnnouncementGroup || !chat?.id) return undefined;
+        const socket = getSocket();
+        if (!socket) return undefined;
+        const onAdvertisementChanged = ({ chatId } = {}) => {
+            if (chatId === chat.id) loadAdvertisements();
+        };
+        socket.on("advertisement:changed", onAdvertisementChanged);
+        return () => socket.off("advertisement:changed", onAdvertisementChanged);
+    }, [chat?.id, isAnnouncementGroup, loadAdvertisements]);
+
+    const filteredAdvertisements = useMemo(() => {
+        const q = searchText.trim().toLowerCase();
+        if (!q) return advertisements;
+        return advertisements.filter((advertisement) => [
+            advertisement.title,
+            advertisement.description,
+            advertisement.settlement,
+            advertisement.price,
+            advertisement.author?.name,
+        ].filter(Boolean).join(" ").toLowerCase().includes(q));
+    }, [advertisements, searchText]);
 
     // ✅ phone: берём из activeUser, если нет — из chat.otherUser (новый payload с сервера)
     const otherPhone =
@@ -1042,7 +1188,8 @@ export default function ChatWindow({
                         onClick={onBackToList}
                         aria-label="Назад к списку кругов"
                     >
-                        ←
+                        <span aria-hidden="true">←</span>
+                        <span>Чаты</span>
                     </button>
 
                     <div className="chat-avatar" aria-hidden="true" />
@@ -1093,7 +1240,19 @@ export default function ChatWindow({
             </header>
             {activeCall ? (
                 <div className="chat-call-overlay">
+                    {activeCall.type === "video" ? (
+                        <div className="chat-call-video-stage">
+                            <video ref={remoteVideoRef} className="chat-call-remote-video" autoPlay playsInline muted />
+                            <video ref={localVideoRef} className="chat-call-local-video" autoPlay playsInline muted />
+                            {!callCameraEnabled ? <span className="chat-call-camera-off">Камера выключена</span> : null}
+                        </div>
+                    ) : (
+                        <div className="chat-call-avatar" aria-hidden="true">
+                            {String(activeUser?.name || "?").slice(0, 1).toUpperCase()}
+                        </div>
+                    )}
                     <strong>{activeCall.type === "video" ? "🎥 Видеозвонок" : "📞 Аудиозвонок"}</strong>
+                    <strong>{activeUser?.name ?? "Контакт"}</strong>
                     <span className="chat-type">
                         {activeCall.direction === "incoming" ? "Входящий" : "Исходящий"} • {getCallStatusLabel(activeCall.status)}
                     </span>
@@ -1103,6 +1262,7 @@ export default function ChatWindow({
                     {activeCall.status === "connected" ? (
                         <span className="chat-type">Длительность: {formatCallDuration(callElapsedSec)}</span>
                     ) : null}
+                    {callCameraNotice ? <span className="chat-call-notice">{callCameraNotice}</span> : null}
                     {CALL_DEBUG_ENABLED ? (
                         <span className="chat-type">
                             WebRTC: pc={peerConnectionState} • ice={iceConnectionState}
@@ -1147,6 +1307,16 @@ export default function ChatWindow({
                                 {callMicMuted ? "Включить микрофон" : "Выключить микрофон"}
                             </button>
                         ) : null}
+                        {activeCall.status === "connected" && activeCall.type === "video" && !callCameraNotice ? (
+                            <button type="button" onClick={() => setCallCameraEnabled((prev) => !prev)}>
+                                {callCameraEnabled ? "Скрыть видео" : "Показать видео"}
+                            </button>
+                        ) : null}
+                        {activeCall.status === "connected" ? (
+                            <button type="button" onClick={() => setCallSpeakerMuted((prev) => !prev)}>
+                                {callSpeakerMuted ? "Включить динамик" : "Выключить динамик"}
+                            </button>
+                        ) : null}
                     </div>
                 </div>
             ) : null}
@@ -1177,12 +1347,36 @@ export default function ChatWindow({
                     <button
                         type="button"
                         onClick={() => {
-                            endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+                            scrollToLatest("smooth");
                             setIsHeaderMenuOpen(false);
                         }}
                     >
                         К последнему сообщению
                     </button>
+                    {chat?.type === "private" ? (
+                        <button
+                            type="button"
+                            className="chat-delete-action"
+                            onClick={() => {
+                                setIsHeaderMenuOpen(false);
+                                isContactBlocked ? onUnblockContact?.() : onBlockContact?.();
+                            }}
+                        >
+                            {isContactBlocked ? "Разблокировать" : "Заблокировать"}
+                        </button>
+                    ) : null}
+                    {chat?.type === "private" ? (
+                        <button
+                            type="button"
+                            className="chat-delete-action"
+                            onClick={() => {
+                                setIsHeaderMenuOpen(false);
+                                onDeleteChat?.();
+                            }}
+                        >
+                            Удалить чат
+                        </button>
+                    ) : null}
                 </div>
             ) : null}
 
@@ -1196,24 +1390,8 @@ export default function ChatWindow({
                     {/* FEED */}
                     {announcementMode === "feed" ? (
                         <>
-                            <div className="messages" onScroll={handleMessagesScroll}>
+                            <div ref={messagesViewportRef} className="messages" onScroll={handleMessagesScroll}>
                                 {historyNotice ? <div className="history-notice">{historyNotice}</div> : null}
-
-                                {hasSelectedChat && hasMoreHistory ? (
-                                    <button
-                                        type="button"
-                                        className="history-load-more"
-                                        onClick={onLoadOlderMessages}
-                                        disabled={historyLoading}
-                                    >
-                                        {historyLoading ? "Загружаем..." : "Показать более ранние объявления"}
-                                    </button>
-                                ) : null}
-
-                                {hasSelectedChat && !hasMoreHistory && chat?.messages?.length ? (
-                                    <div className="history-end">Более ранних объявлений нет</div>
-                                ) : null}
-
 
                                 {!hasSelectedChat ? (
                                     <div className="chat-empty-placeholder">
@@ -1221,10 +1399,16 @@ export default function ChatWindow({
                                     </div>
                                 ) : null}
 
-                                {filteredMessages.map((m) => (
+                                {advertisementsLoading ? <div className="chat-empty-placeholder">Загружаем объявления…</div> : null}
+                                {advertisementsError ? <div className="chat-empty-placeholder">{advertisementsError}</div> : null}
+                                {!advertisementsLoading && !advertisementsError && hasSelectedChat && filteredAdvertisements.length === 0 ? (
+                                    <div className="chat-empty-placeholder">В этой группе пока нет объявлений.</div>
+                                ) : null}
+
+                                {filteredAdvertisements.map((advertisement) => (
                                     <AnnouncementCard
-                                        key={m.id}
-                                        message={m}
+                                        key={advertisement.id}
+                                        advertisement={advertisement}
                                         currentUserId={currentUserId}
                                         onWriteToAuthor={onWriteToAuthor}
                                     />
@@ -1267,8 +1451,10 @@ export default function ChatWindow({
 
                             <AnnouncementComposer
                                 disabled={!chat || !hasSelectedChat || !canPublish}
-                                onSubmit={({ text, imageUrls }) => {
-                                    onSend({ text, imageUrls });
+                                imageRequired={false}
+                                onSubmit={async (form) => {
+                                    await createAdvertisement({ chatId: chat.id, ...form });
+                                    await loadAdvertisements();
                                     setAnnouncementMode("feed");
                                 }}
                             />
@@ -1280,7 +1466,7 @@ export default function ChatWindow({
                 ОБЫЧНЫЕ ЧАТЫ (ЛИЧКА + ПОБОЛТАЕМ)
                 ======================= */
                 <>
-                    <div className="messages" onScroll={handleMessagesScroll}>
+                    <div ref={messagesViewportRef} className="messages" onScroll={handleMessagesScroll}>
                         {historyNotice ? <div className="history-notice">{historyNotice}</div> : null}
 
                         {hasSelectedChat && hasMoreHistory ? (
@@ -1346,6 +1532,21 @@ export default function ChatWindow({
                                                 ))
                                             : null}
 
+                                        {Array.isArray(m.attachments)
+                                            ? m.attachments
+                                                .filter((attachment) => attachment?.mediaType === "video" && attachment?.url)
+                                                .map((attachment) => (
+                                                    <video
+                                                        key={attachment.id ?? attachment.url}
+                                                        className="message-video"
+                                                        controls
+                                                        playsInline
+                                                        preload="metadata"
+                                                        src={attachment.url}
+                                                    />
+                                                ))
+                                            : null}
+
 
                                         {m.text ? <div className="message-text">{m.text}</div> : null}
                                     </div>
@@ -1363,13 +1564,17 @@ export default function ChatWindow({
                     </div>
 
                     {/* превью для обычного чата */}
-                    {selectedImagePreview ? (
+                    {selectedMediaPreview ? (
                         <div className="draft-preview">
-                            <img src={selectedImagePreview} alt="" />
+                            {selectedMediaFile?.type?.startsWith("video/") ? (
+                                <video src={selectedMediaPreview} controls playsInline preload="metadata" />
+                            ) : (
+                                <img src={selectedMediaPreview} alt="" />
+                            )}
                             <button
                                 type="button"
                                 className="draft-preview-remove"
-                                onClick={clearSelectedImage}
+                                onClick={clearSelectedMedia}
                                 disabled={uploading}
                                 aria-label="remove image"
                             >
@@ -1414,7 +1619,7 @@ export default function ChatWindow({
                                 aria-label="attach"
                                 disabled={!chat || !hasSelectedChat || uploading || !canPublish || !canUseComposer}
                                 onClick={() => fileInputRef.current?.click()}
-                                title="Прикрепить картинку"
+                                title="Прикрепить картинку или видео"
                             >
                                 📎
                             </button>
@@ -1422,9 +1627,9 @@ export default function ChatWindow({
                             <input
                                 ref={fileInputRef}
                                 type="file"
-                                accept="image/*"
+                                accept="image/*,video/mp4,video/webm"
                                 style={{ display: "none" }}
-                                onChange={onPickImage}
+                                onChange={onPickMedia}
                             />
 
                             <button

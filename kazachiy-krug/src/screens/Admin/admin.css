@@ -1,21 +1,292 @@
-.admin-page { padding: 24px; color: var(--color-primary); }
-.admin-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
-.admin-header h1 { margin: 0; font-size: 32px; }
-.admin-header p { margin: 6px 0 0; color: var(--color-muted); }
-.admin-header button, .admin-registration-actions button { border: 0; border-radius: 10px; padding: 10px 16px; cursor: pointer; }
-.admin-registration-list { display: grid; gap: 14px; }
-.admin-registration-card { display: flex; justify-content: space-between; gap: 20px; padding: 18px; border: 1px solid var(--border-light); border-radius: 14px; background: var(--bg-card); }
-.admin-registration-card h2 { margin: 0 0 10px; }
-.admin-registration-card p { margin: 5px 0; }
-.admin-registration-card span { color: var(--color-muted); }
-.admin-registration-card a { color: var(--color-accent); }
-.admin-registration-card strong { font-size: 24px; letter-spacing: 0.12em; }
-.admin-registration-actions { display: flex; align-items: center; gap: 8px; }
-.admin-registration-actions .approve { background: #267a3b; color: #fff; }
-.admin-registration-actions .reject { background: #a52b2b; color: #fff; }
-.admin-error { color: #b42318; }
-.admin-empty { padding: 28px; border: 1px dashed var(--border-light); border-radius: 14px; text-align: center; color: var(--color-muted); }
+.admin-page {
+    min-height: 100%;
+    padding: 24px;
+    color: var(--color-primary);
+}
+
+.admin-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.admin-header h1 {
+    margin: 0;
+    font-size: 32px;
+}
+
+.admin-header p {
+    margin: 6px 0 0;
+    color: var(--color-muted);
+}
+
+.admin-header button,
+.admin-registration-actions button,
+.admin-modal-actions button {
+    border: 0;
+    border-radius: 10px;
+    padding: 10px 16px;
+    cursor: pointer;
+}
+
+.admin-header button,
+.admin-modal-actions button:first-child {
+    border: 1px solid var(--border-light);
+    background: var(--bg-card);
+    color: var(--color-primary);
+}
+
+.admin-registration-list {
+    display: grid;
+    gap: 16px;
+}
+
+.admin-registration-card {
+    display: grid;
+    gap: 18px;
+    padding: 20px;
+    border: 1px solid var(--border-light);
+    border-radius: 16px;
+    background: var(--bg-card);
+}
+
+.admin-registration-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.admin-registration-card h2 {
+    margin: 0;
+    font-size: 24px;
+}
+
+.admin-registration-card-header p {
+    margin: 5px 0 0;
+    color: var(--color-muted);
+}
+
+.admin-registration-code {
+    min-width: 150px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid rgba(122, 46, 46, 0.28);
+    border-radius: 12px;
+    padding: 10px 14px;
+    background: rgba(122, 46, 46, 0.06);
+}
+
+.admin-registration-code span,
+.admin-registration-detail > span {
+    color: var(--color-muted);
+    font-size: 13px;
+}
+
+.admin-registration-code strong {
+    color: var(--color-accent);
+    font-size: 28px;
+    letter-spacing: 0.16em;
+}
+
+.admin-registration-details {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 20px;
+}
+
+.admin-registration-detail {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+}
+
+.admin-registration-detail.wide {
+    grid-column: 1 / -1;
+}
+
+.admin-registration-detail > div {
+    overflow-wrap: anywhere;
+    line-height: 1.4;
+}
+
+.admin-registration-detail a {
+    color: var(--color-accent);
+}
+
+.admin-purpose-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+.admin-purpose-list span {
+    border: 1px solid var(--border-light);
+    border-radius: 999px;
+    padding: 5px 9px;
+    background: var(--bg-main);
+    color: var(--color-primary);
+    font-size: 13px;
+}
+
+.admin-registration-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding-top: 4px;
+}
+
+.admin-registration-actions .approve {
+    background: #267a3b;
+    color: #fff;
+}
+
+.admin-registration-actions .reject,
+.admin-modal-actions .reject {
+    background: #a52b2b;
+    color: #fff;
+}
+
+.admin-registration-actions button:disabled,
+.admin-modal-actions button:disabled {
+    cursor: wait;
+    opacity: 0.6;
+}
+
+.admin-recovery-approved {
+    margin: 0;
+    border-radius: 12px;
+    padding: 12px 14px;
+    background: rgba(38, 122, 59, 0.12);
+    color: #267a3b;
+    text-align: center;
+}
+
+:root[data-theme="dark"] .admin-recovery-approved {
+    color: #83d99a;
+}
+
+.admin-error {
+    margin: 12px 0;
+    color: #b42318;
+}
+
+:root[data-theme="dark"] .admin-error {
+    color: #ff9f96;
+}
+
+.admin-empty {
+    padding: 28px;
+    border: 1px dashed var(--border-light);
+    border-radius: 14px;
+    color: var(--color-muted);
+    text-align: center;
+}
+
+.admin-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(15, 12, 10, 0.62);
+    backdrop-filter: blur(4px);
+}
+
+.admin-reject-modal {
+    width: min(100%, 520px);
+    display: grid;
+    gap: 13px;
+    border: 1px solid var(--border-light);
+    border-radius: 18px;
+    padding: 24px;
+    background: var(--bg-card);
+    color: var(--color-primary);
+    box-shadow: 0 26px 80px rgba(0, 0, 0, 0.38);
+}
+
+.admin-reject-modal h2,
+.admin-reject-modal p {
+    margin: 0;
+}
+
+.admin-reject-modal label {
+    font-size: 14px;
+    font-weight: 650;
+    text-align: left;
+}
+
+.admin-reject-modal textarea {
+    width: 100%;
+    resize: vertical;
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    padding: 12px;
+    outline: 0;
+    background: var(--bg-main);
+    color: var(--color-primary);
+    font: inherit;
+    line-height: 1.45;
+}
+
+.admin-reject-modal textarea:focus {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px rgba(122, 46, 46, 0.13);
+}
+
+.admin-reject-modal small {
+    color: var(--color-muted);
+    text-align: right;
+}
+
+.admin-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 4px;
+}
+
 @media (max-width: 700px) {
-    .admin-header, .admin-registration-card { align-items: stretch; flex-direction: column; }
-    .admin-registration-actions button { flex: 1; }
+    .admin-page {
+        padding: 72px 14px 20px;
+    }
+
+    .admin-header,
+    .admin-registration-card-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .admin-header h1 {
+        font-size: 27px;
+    }
+
+    .admin-registration-code {
+        align-items: flex-start;
+    }
+
+    .admin-registration-details {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-registration-detail.wide {
+        grid-column: auto;
+    }
+
+    .admin-registration-actions,
+    .admin-modal-actions {
+        flex-direction: column;
+    }
+
+    .admin-registration-actions button,
+    .admin-modal-actions button {
+        width: 100%;
+    }
 }

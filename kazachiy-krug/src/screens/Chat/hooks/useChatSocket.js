@@ -34,6 +34,7 @@ export function useChatSocket(
 
         const requestUsers = () => {
             socket.emit("users:get");
+            socket.emit("chats:get");
         };
 
         const onUsers = (users) => {
@@ -41,13 +42,19 @@ export function useChatSocket(
             dispatch({ type: "SET_USERS", payload: users });
         };
 
+        const onChats = (dialogs) => {
+            dispatch({ type: "HYDRATE_PRIVATE_DIALOGS", payload: dialogs });
+        };
+
         socket.on("users:list", onUsers);
+        socket.on("chats:list", onChats);
         socket.on("connect", requestUsers);
         socket.on("auth:success", requestUsers);
         requestUsers();
 
         return () => {
             socket.off("users:list", onUsers);
+            socket.off("chats:list", onChats);
             socket.off("connect", requestUsers);
             socket.off("auth:success", requestUsers);
         };
@@ -73,6 +80,9 @@ export function useChatSocket(
                 membersInfo,
                 otherUser,
                 canPublish,
+                contentType,
+                requiresAnnouncementWithImage,
+                advertisementLifetimeDays,
             } = payload || {};
 
             dispatch({
@@ -87,6 +97,9 @@ export function useChatSocket(
                     membersInfo,
                     otherUser,
                     canPublish,
+                    contentType,
+                    requiresAnnouncementWithImage,
+                    advertisementLifetimeDays,
                 },
 
             });
@@ -177,6 +190,7 @@ export function useChatSocket(
                 payload: {
                     chatId: message.chatId,
                     message,
+                    currentUserId: currentUser.id,
                 },
             });
 
@@ -222,16 +236,23 @@ export function useChatSocket(
             }
         };
 
+        const onChatDeleted = ({ chatId } = {}) => {
+            if (!chatId) return;
+            dispatch({ type: "DELETE_PRIVATE_CHAT", payload: { chatId } });
+        };
+
         socket.on("message:new", onMessage);
         socket.on("message:delivered", onDelivered);
         socket.on("message:read", onRead);
         socket.on("message:error", onMessageError);
+        socket.on("chat:deleted", onChatDeleted);
 
         return () => {
             socket.off("message:new", onMessage);
             socket.off("message:delivered", onDelivered);
             socket.off("message:read", onRead);
             socket.off("message:error", onMessageError);
+            socket.off("chat:deleted", onChatDeleted);
         };
     }, [activeChatId, currentUser?.id, dispatch]);
 

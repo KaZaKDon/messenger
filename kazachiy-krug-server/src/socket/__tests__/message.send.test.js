@@ -4,12 +4,23 @@ import assert from "node:assert/strict";
 import { messageSocket } from "../message.socket.js";
 import { prisma } from "../../db/prisma.js";
 
-function createFakeSocket(userId = "user-1") {
+let originalUserBlockFindFirst;
+test.beforeEach(() => {
+    originalUserBlockFindFirst = prisma.userBlock.findFirst;
+    prisma.userBlock.findFirst = async () => null;
+});
+test.afterEach(() => { prisma.userBlock.findFirst = originalUserBlockFindFirst; });
+
+function createFakeSocket(userId = "user-1", role = "user") {
     return {
         data: {
             isAuth: true,
             userId,
             userName: "Test User",
+            user: {
+                id: userId,
+                role,
+            },
         },
         handlers: new Map(),
         emitted: [],
@@ -67,6 +78,210 @@ test("message:send rejects readonly group publish when user not in publishUserId
         assert.ok(errorEvent, "message:error should be emitted");
         assert.equal(errorEvent.payload.reason, "У вас нет прав на публикацию в этой группе.");
         assert.equal(createCalled, false, "prisma.message.create must not be called");
+    } finally {
+        prisma.chat.findFirst = originalChatFindFirst;
+        prisma.groupRule.findUnique = originalGroupRuleFindUnique;
+        prisma.message.create = originalMessageCreate;
+    }
+});
+
+test("message:send allows a moderator to publish in the public information group", async () => {
+    const socket = createFakeSocket("moderator-1", "moderator");
+    messageSocket(createFakeIo(), socket);
+
+    const originalChatFindFirst = prisma.chat.findFirst;
+    const originalGroupRuleFindUnique = prisma.groupRule.findUnique;
+    const originalMessageCreate = prisma.message.create;
+
+    let createCalled = false;
+
+    prisma.chat.findFirst = async () => ({
+        id: "group-1",
+        type: "group",
+        members: [],
+    });
+    prisma.groupRule.findUnique = async () => ({
+        mode: "readonly",
+        visibility: "public",
+        publishPolicy: "admin_moderator",
+        status: "active",
+        requiresAnnouncementWithImage: false,
+        publishUserIds: ["user-1"],
+        publishers: [],
+    });
+    prisma.message.create = async () => {
+        createCalled = true;
+        return {
+            id: "m-info",
+            chatId: "group-1",
+            senderId: "moderator-1",
+            text: "important information",
+            type: "text",
+            imageUrl: null,
+            imageUrls: null,
+            attachments: [],
+            status: "sent",
+            createdAt: new Date(),
+        };
+    };
+
+    try {
+        await socket.handlers.get("message:send")({
+            id: "m-info",
+            chatId: "group-1",
+            text: "important information",
+        });
+
+        assert.equal(createCalled, true);
+        assert.equal(socket.emitted.some((item) => item.event === "message:error"), false);
+    } finally {
+        prisma.chat.findFirst = originalChatFindFirst;
+        prisma.groupRule.findUnique = originalGroupRuleFindUnique;
+        prisma.message.create = originalMessageCreate;
+    }
+});
+
+test("message:send does not let an administrator bypass selected authors", async () => {
+    const socket = createFakeSocket("admin-1", "admin");
+    messageSocket(createFakeIo(), socket);
+
+    const originalChatFindFirst = prisma.chat.findFirst;
+    const originalGroupRuleFindUnique = prisma.groupRule.findUnique;
+    const originalMessageCreate = prisma.message.create;
+
+    let createCalled = false;
+
+    prisma.chat.findFirst = async () => ({
+        id: "group-2",
+        type: "group",
+        members: [],
+    });
+    prisma.groupRule.findUnique = async () => ({
+        mode: "readonly",
+        visibility: "public",
+        publishPolicy: "selected_authors",
+        status: "active",
+        requiresAnnouncementWithImage: false,
+        publishUserIds: [],
+        publishers: [{ userId: "author-1" }],
+    });
+    prisma.message.create = async () => {
+        createCalled = true;
+        throw new Error("should not create");
+    };
+
+    try {
+        await socket.handlers.get("message:send")({
+            id: "m-selected",
+            chatId: "group-2",
+            text: "not assigned",
+        });
+
+        const errorEvent = socket.emitted.find((item) => item.event === "message:error");
+        assert.equal(errorEvent?.payload.reason, "У вас нет прав на публикацию в этой группе.");
+        assert.equal(createCalled, false);
+    } finally {
+        prisma.chat.findFirst = originalChatFindFirst;
+        prisma.groupRule.findUnique = originalGroupRuleFindUnique;
+        prisma.message.create = originalMessageCreate;
+    }
+});
+
+test("message:send keeps private group hidden even from a non-member administrator", async () => {
+    const socket = createFakeSocket("admin-1", "admin");
+    messageSocket(createFakeIo(), socket);
+
+    const originalChatFindFirst = prisma.chat.findFirst;
+    const originalGroupRuleFindUnique = prisma.groupRule.findUnique;
+    const originalMessageCreate = prisma.message.create;
+
+    let createCalled = false;
+
+    prisma.chat.findFirst = async () => ({
+        id: "group-13",
+        type: "group",
+        members: [{ userId: "user-7" }],
+    });
+    prisma.groupRule.findUnique = async () => ({
+        mode: "chat",
+        visibility: "private",
+        publishPolicy: "members",
+        status: "active",
+        requiresAnnouncementWithImage: false,
+        publishUserIds: [],
+        publishers: [],
+    });
+    prisma.message.create = async () => {
+        createCalled = true;
+        throw new Error("should not create");
+    };
+
+    try {
+        await socket.handlers.get("message:send")({
+            id: "m-private",
+            chatId: "group-13",
+            text: "no access",
+        });
+
+        const errorEvent = socket.emitted.find((item) => item.event === "message:error");
+        assert.equal(errorEvent?.payload.reason, "У вас нет доступа к этой группе.");
+        assert.equal(createCalled, false);
+    } finally {
+        prisma.chat.findFirst = originalChatFindFirst;
+        prisma.groupRule.findUnique = originalGroupRuleFindUnique;
+        prisma.message.create = originalMessageCreate;
+    }
+});
+
+test("message:send allows an active user to publish in a public category without chat membership", async () => {
+    const socket = createFakeSocket("user-9", "user");
+    messageSocket(createFakeIo(), socket);
+
+    const originalChatFindFirst = prisma.chat.findFirst;
+    const originalGroupRuleFindUnique = prisma.groupRule.findUnique;
+    const originalMessageCreate = prisma.message.create;
+
+    let createCalled = false;
+
+    prisma.chat.findFirst = async () => ({
+        id: "group-4",
+        type: "group",
+        members: [{ userId: "user-1" }],
+    });
+    prisma.groupRule.findUnique = async () => ({
+        mode: "announcements",
+        visibility: "public",
+        publishPolicy: "members",
+        status: "active",
+        requiresAnnouncementWithImage: false,
+        publishUserIds: [],
+        publishers: [],
+    });
+    prisma.message.create = async () => {
+        createCalled = true;
+        return {
+            id: "m-public",
+            chatId: "group-4",
+            senderId: "user-9",
+            text: "public category",
+            type: "text",
+            imageUrl: null,
+            imageUrls: null,
+            attachments: [],
+            status: "sent",
+            createdAt: new Date(),
+        };
+    };
+
+    try {
+        await socket.handlers.get("message:send")({
+            id: "m-public",
+            chatId: "group-4",
+            text: "public category",
+        });
+
+        assert.equal(createCalled, true);
+        assert.equal(socket.emitted.some((item) => item.event === "message:error"), false);
     } finally {
         prisma.chat.findFirst = originalChatFindFirst;
         prisma.groupRule.findUnique = originalGroupRuleFindUnique;

@@ -11,6 +11,9 @@ import {
     usersById
 } from "../store/users.js";
 import { SOCKET_MEMORY_FALLBACK_ENABLED } from "../config/runtimeFlags.js";
+import { getGroupCapabilities } from "../groups/groupAccessPolicy.js";
+import { GROUP_RULE_ACCESS_SELECT } from "../groups/groupAccessRepository.js";
+import { isPrivateContactUnavailable } from "../contacts/userBlockService.js";
 
 const HISTORY_PAGE_SIZE = 50;
 
@@ -65,30 +68,62 @@ function isUnsupportedMessageMediaSchemaError(error) {
     );
 }
 
-async function getGroupRuleDb(chatId) {
-    return prisma.groupRule.findUnique({
-        where: { chatId },
-        select: {
-            mode: true,
-            requiresAnnouncementWithImage: true,
-            publishUserIds: true,
-        },
-    });
+function socketUser(socket) {
+    return socket.data.user ?? {
+        id: socket.data.userId,
+        role: "user",
+    };
 }
 
-async function canPublishToGroupDb(chatId, userId) {
-    const rule = await getGroupRuleDb(chatId);
+function isChatMember(chat, userId) {
+    return chat?.members?.some((member) => member.userId === userId) ?? false;
+}
 
-    if (!rule) return true;
+function canViewMemoryChat(chat, socket) {
+    if (!chat) return false;
+    if (chat.type !== "group") return chat.members.includes(socket.data.userId);
 
-    if (Array.isArray(rule.publishUserIds) && rule.publishUserIds.length > 0) {
-        return rule.publishUserIds.includes(userId);
-    }
+    return getGroupCapabilities({
+        rule: GROUP_RULES[chat.id] ?? null,
+        user: socketUser(socket),
+        isMember: chat.members.includes(socket.data.userId),
+    }).canView;
+}
 
-    if (rule.mode === "chat") return true;
-    if (rule.mode === "announcements") return true;
+async function getAccessibleChatDb(chatId, currentUser) {
+    const chat = await prisma.chat.findFirst({
+        where: {
+            id: chatId,
+        },
+        select: {
+            id: true,
+            type: true,
+            members: {
+                where: {
+                    userId: currentUser.id,
+                },
+                select: {
+                    userId: true,
+                    clearedAt: true,
+                },
+            },
+            groupRule: {
+                select: GROUP_RULE_ACCESS_SELECT,
+            },
+        },
+    });
 
-    return false;
+    if (!chat) return null;
+    const isMember = isChatMember(chat, currentUser.id);
+    if (chat.type !== "group") return isMember ? chat : null;
+
+    const capabilities = getGroupCapabilities({
+        rule: chat.groupRule,
+        user: currentUser,
+        isMember,
+    });
+
+    return capabilities.canView ? chat : null;
 }
 
 function buildPrivateChatId(userA, userB) {
@@ -166,8 +201,109 @@ function mapDbMessages(messages = []) {
     });
 }
 
-async function getChatMessagesPageDb(chatId, beforeCreatedAt = null, pageSize = HISTORY_PAGE_SIZE) {
+export async function listPrivateDialogsDb(currentUserId, db = prisma) {
+    const blockRows = await db.userBlock.findMany({
+        where: { OR: [{ blockerId: currentUserId }, { blockedId: currentUserId }] },
+        select: { blockerId: true, blockedId: true },
+    });
+    const unavailableUserIds = new Set(blockRows.map((row) => (
+        row.blockerId === currentUserId ? row.blockedId : row.blockerId
+    )));
+    const memberships = await db.chatMember.findMany({
+        where: {
+            userId: currentUserId,
+            chat: { type: "private" },
+        },
+        select: {
+            clearedAt: true,
+            chat: {
+                select: {
+                    id: true,
+                    type: true,
+                    members: {
+                        select: {
+                            user: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    phone: true,
+                                    avatar: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    });
+
+    const dialogs = await Promise.all(memberships.map(async (membership) => {
+        const membersInfo = membership.chat.members.map(({ user }) => user);
+        const otherUser = membersInfo.find((user) => user.id !== currentUserId) ?? null;
+        if (!otherUser || unavailableUserIds.has(otherUser.id)) return null;
+
+        const visibleAfter = membership.clearedAt;
+        const lastMessage = await db.message.findFirst({
+            where: {
+                chatId: membership.chat.id,
+                ...(membership.clearedAt ? { createdAt: { gt: membership.clearedAt } } : {}),
+            },
+            orderBy: { createdAt: "desc" },
+            select: {
+                id: true,
+                chatId: true,
+                senderId: true,
+                text: true,
+                type: true,
+                imageUrl: true,
+                imageUrls: true,
+                attachments: {
+                    select: {
+                        id: true,
+                        mediaType: true,
+                        url: true,
+                        mimeType: true,
+                        sizeBytes: true,
+                        durationMs: true,
+                        waveform: true,
+                        width: true,
+                        height: true,
+                    },
+                },
+                status: true,
+                createdAt: true,
+            },
+        });
+
+        if (!lastMessage) return null;
+
+        const unreadCount = await db.message.count({
+            where: {
+                chatId: membership.chat.id,
+                senderId: { not: currentUserId },
+                status: { not: "read" },
+                ...(visibleAfter ? { createdAt: { gt: visibleAfter } } : {}),
+            },
+        });
+        return {
+            chatId: membership.chat.id,
+            type: membership.chat.type,
+            members: membersInfo.map((user) => user.id),
+            membersInfo,
+            otherUser,
+            messages: mapDbMessages([lastMessage]),
+            unreadCount,
+        };
+    }));
+
+    return dialogs
+        .filter(Boolean)
+        .sort((a, b) => (b.messages[0]?.createdAt ?? 0) - (a.messages[0]?.createdAt ?? 0));
+}
+
+async function getChatMessagesPageDb(chatId, beforeCreatedAt = null, pageSize = HISTORY_PAGE_SIZE, visibleAfter = null) {
     const cursor = normalizeCursor(beforeCreatedAt);
+    const cutoff = normalizeCursor(visibleAfter);
 
     let messages;
 
@@ -175,7 +311,12 @@ async function getChatMessagesPageDb(chatId, beforeCreatedAt = null, pageSize = 
         messages = await prisma.message.findMany({
             where: {
                 chatId,
-                ...(cursor ? { createdAt: { lt: cursor } } : {}),
+                ...((cursor || cutoff) ? {
+                    createdAt: {
+                        ...(cursor ? { lt: cursor } : {}),
+                        ...(cutoff ? { gt: cutoff } : {}),
+                    },
+                } : {}),
             },
             orderBy: {
                 createdAt: "desc",
@@ -213,7 +354,12 @@ async function getChatMessagesPageDb(chatId, beforeCreatedAt = null, pageSize = 
         messages = await prisma.message.findMany({
             where: {
                 chatId,
-                ...(cursor ? { createdAt: { lt: cursor } } : {}),
+                ...((cursor || cutoff) ? {
+                    createdAt: {
+                        ...(cursor ? { lt: cursor } : {}),
+                        ...(cutoff ? { gt: cutoff } : {}),
+                    },
+                } : {}),
             },
             orderBy: {
                 createdAt: "desc",
@@ -317,16 +463,11 @@ async function upsertPrivateChatDb(currentUserId, targetUserId) {
     return chatId;
 }
 
-async function getGroupChatPayloadDb(chatId, currentUserId) {
+async function getGroupChatPayloadDb(chatId, currentUser) {
     const groupChat = await prisma.chat.findFirst({
         where: {
             id: chatId,
             type: "group",
-            members: {
-                some: {
-                    userId: currentUserId,
-                },
-            },
         },
         select: {
             id: true,
@@ -337,13 +478,21 @@ async function getGroupChatPayloadDb(chatId, currentUserId) {
                     userId: true,
                 },
             },
+            groupRule: {
+                select: GROUP_RULE_ACCESS_SELECT,
+            },
         },
     });
 
     if (!groupChat) return null;
-    const history = await getChatMessagesPageDb(chatId);
+    const capabilities = getGroupCapabilities({
+        rule: groupChat.groupRule,
+        user: currentUser,
+        isMember: isChatMember(groupChat, currentUser.id),
+    });
+    if (!capabilities.canView) return null;
 
-    const canPublish = await canPublishToGroupDb(groupChat.id, currentUserId);
+    const history = await getChatMessagesPageDb(chatId);
 
     return {
         chatId: groupChat.id,
@@ -352,11 +501,19 @@ async function getGroupChatPayloadDb(chatId, currentUserId) {
         members: groupChat.members.map((m) => m.userId),
         messages: history.messages,
         hasMoreHistory: history.hasMoreHistory,
-        canPublish,
+        canPublish: capabilities.canPublish,
+        canModerate: capabilities.canModerate,
+        canManageMembers: capabilities.canManageMembers,
+        visibility: groupChat.groupRule?.visibility ?? null,
+        status: groupChat.groupRule?.status ?? null,
+        contentType: groupChat.groupRule?.contentType ?? null,
+        requiresAnnouncementWithImage: groupChat.groupRule?.requiresAnnouncementWithImage ?? false,
+        advertisementLifetimeDays: groupChat.groupRule?.advertisementLifetimeDays ?? null,
     };
 }
 
 async function getPrivateChatPayloadDb(currentUserId, targetUserId) {
+    if (await isPrivateContactUnavailable(prisma, currentUserId, targetUserId)) return null;
     const chatId = await upsertPrivateChatDb(currentUserId, targetUserId);
 
     const chat = await prisma.chat.findUnique({
@@ -368,6 +525,8 @@ async function getPrivateChatPayloadDb(currentUserId, targetUserId) {
             type: true,
             members: {
                 select: {
+                    userId: true,
+                    clearedAt: true,
                     user: {
                         select: {
                             id: true,
@@ -382,7 +541,17 @@ async function getPrivateChatPayloadDb(currentUserId, targetUserId) {
     });
 
     if (!chat) return null;
-    const history = await getChatMessagesPageDb(chatId);
+    const currentMembership = chat.members.find((member) => member.userId === currentUserId);
+    await prisma.message.updateMany({
+        where: {
+            chatId,
+            senderId: { not: currentUserId },
+            status: { not: "read" },
+            ...(currentMembership?.clearedAt ? { createdAt: { gt: currentMembership.clearedAt } } : {}),
+        },
+        data: { status: "read" },
+    });
+    const history = await getChatMessagesPageDb(chatId, null, HISTORY_PAGE_SIZE, currentMembership?.clearedAt);
 
     const membersInfo = chat.members.map(({
         user
@@ -398,13 +567,20 @@ async function getPrivateChatPayloadDb(currentUserId, targetUserId) {
         otherUser,
         messages: history.messages,
         hasMoreHistory: history.hasMoreHistory,
+        unreadCount: 0,
     };
 }
 
 function openGroupFromMemory(socket, chatId, eventName) {
     const groupChat = chats[chatId];
     if (!groupChat) return true;
-    if (!groupChat.members.includes(socket.data.userId)) return true;
+    const rule = GROUP_RULES[chatId] ?? null;
+    const capabilities = getGroupCapabilities({
+        rule,
+        user: socketUser(socket),
+        isMember: groupChat.members.includes(socket.data.userId),
+    });
+    if (!capabilities.canView) return true;
 
     socket.emit(eventName, {
         chatId: groupChat.id,
@@ -412,7 +588,14 @@ function openGroupFromMemory(socket, chatId, eventName) {
         type: groupChat.type,
         members: groupChat.members,
         messages: groupChat.messages,
-        canPublish: true,
+        canPublish: capabilities.canPublish,
+        canModerate: capabilities.canModerate,
+        canManageMembers: capabilities.canManageMembers,
+        visibility: rule?.visibility ?? null,
+        status: rule?.status ?? null,
+        contentType: rule?.contentType ?? null,
+        requiresAnnouncementWithImage: rule?.requiresAnnouncementWithImage ?? false,
+        advertisementLifetimeDays: rule?.advertisementLifetimeDays ?? null,
     });
 
     return true;
@@ -444,6 +627,18 @@ function openPrivateFromMemory(socket, currentUserId, targetUserId, eventName) {
 
 
 export function chatSocket(io, socket) {
+    socket.on("chats:get", async () => {
+        if (!socket.data.isAuth) return;
+
+        try {
+            const dialogs = await listPrivateDialogsDb(socket.data.userId);
+            socket.emit("chats:list", dialogs);
+        } catch (error) {
+            console.error("chats:get db failed:", error?.message ?? error);
+            socket.emit("chat:error", { message: "Не удалось загрузить список личных чатов" });
+        }
+    });
+
     socket.on("chat:create", async ({
         targetUserId
     }) => {
@@ -452,14 +647,17 @@ export function chatSocket(io, socket) {
         if (!targetUserId || currentUserId === targetUserId) return;
         try {
             if (isGroupId(targetUserId)) {
-                const groupPayload = await getGroupChatPayloadDb(targetUserId, currentUserId);
+                const groupPayload = await getGroupChatPayloadDb(targetUserId, socketUser(socket));
                 if (!groupPayload) return;
                 socket.emit("chat:open", groupPayload);
                 return;
             }
 
             const privatePayload = await getPrivateChatPayloadDb(currentUserId, targetUserId);
-            if (!privatePayload) return;
+            if (!privatePayload) {
+                socket.emit("chat:error", { message: "Пользователь сейчас недоступен" });
+                return;
+            }
 
             socket.emit("chat:open", privatePayload);
         } catch (error) {
@@ -488,14 +686,17 @@ export function chatSocket(io, socket) {
         if (!targetUserId || currentUserId === targetUserId) return;
         try {
             if (isGroupId(targetUserId)) {
-                const groupPayload = await getGroupChatPayloadDb(targetUserId, currentUserId);
+                const groupPayload = await getGroupChatPayloadDb(targetUserId, socketUser(socket));
                 if (!groupPayload) return;
                 socket.emit("chat:opened", groupPayload);
                 return;
             }
 
             const privatePayload = await getPrivateChatPayloadDb(currentUserId, targetUserId);
-            if (!privatePayload) return;
+            if (!privatePayload) {
+                socket.emit("chat:error", { message: "Пользователь сейчас недоступен" });
+                return;
+            }
 
             socket.emit("chat:opened", privatePayload);
         } catch (error) {
@@ -520,32 +721,17 @@ export function chatSocket(io, socket) {
         if (!chatId) return;
 
         try {
-            const chat = await prisma.chat.findFirst({
-                where: {
-                    id: chatId,
-                    OR: [
-                        {
-                            members: {
-                                some: {
-                                    userId: socket.data.userId,
-                                },
-                            },
-                        },
-                        {
-                            groupRule: {
-                                is: {
-                                    mode: "announcements",
-                                },
-                            },
-                        },
-                    ],
-                },
-                select: { id: true },
-            });
+            const chat = await getAccessibleChatDb(chatId, socketUser(socket));
 
             if (!chat) return;
 
-            const history = await getChatMessagesPageDb(chatId, beforeCreatedAt);
+            const currentMembership = chat.members?.find((member) => member.userId === socket.data.userId);
+            const history = await getChatMessagesPageDb(
+                chatId,
+                beforeCreatedAt,
+                HISTORY_PAGE_SIZE,
+                chat.type === "private" ? currentMembership?.clearedAt : null
+            );
             socket.emit("chat:history", {
                 chatId,
                 messages: history.messages,
@@ -556,8 +742,7 @@ export function chatSocket(io, socket) {
 
             if (SOCKET_MEMORY_FALLBACK_ENABLED) {
                 const chat = chats[chatId];
-                if (!chat) return;
-                if (!chat.members.includes(socket.data.userId)) return;
+                if (!canViewMemoryChat(chat, socket)) return;
 
                 const history = getChatMessagesPageMemory(chatId, beforeCreatedAt);
                 socket.emit("chat:history", {
@@ -572,34 +757,43 @@ export function chatSocket(io, socket) {
         }
     });
 
+    socket.on("chat:delete", async ({ chatId } = {}) => {
+        if (!socket.data.isAuth || !chatId) return;
+
+        try {
+            const chat = await prisma.chat.findFirst({
+                where: {
+                    id: chatId,
+                    type: "private",
+                    members: { some: { userId: socket.data.userId } },
+                },
+                select: { id: true },
+            });
+            if (!chat) {
+                socket.emit("chat:error", { message: "Удалять можно только свой личный чат" });
+                return;
+            }
+
+            const clearedAt = new Date();
+            await prisma.chatMember.update({
+                where: { chatId_userId: { chatId, userId: socket.data.userId } },
+                data: { clearedAt },
+            });
+            socket.leave(chatId);
+            socket.emit("chat:deleted", { chatId, clearedAt: clearedAt.toISOString() });
+        } catch (error) {
+            console.error("chat:delete db failed:", error?.message ?? error);
+            socket.emit("chat:error", { message: "Не удалось удалить чат" });
+        }
+    });
+
     socket.on("join:chat", async ({ chatId }) => {
         if (!socket.data.isAuth) return;
         if (!chatId) return;
         if (socket.rooms.has(chatId)) return;
 
         try {
-            const chat = await prisma.chat.findFirst({
-                where: {
-                    id: chatId,
-                    OR: [
-                        {
-                            members: {
-                                some: {
-                                    userId: socket.data.userId,
-                                },
-                            },
-                        },
-                        {
-                            groupRule: {
-                                is: {
-                                    mode: "announcements",
-                                },
-                            },
-                        },
-                    ],
-                },
-                select: { id: true },
-            });
+            const chat = await getAccessibleChatDb(chatId, socketUser(socket));
 
             if (!chat) return;
 
@@ -616,8 +810,7 @@ export function chatSocket(io, socket) {
         }
 
         const chat = chats[chatId];
-        if (!chat) return;
-        if (!chat.members.includes(socket.data.userId)) return;
+        if (!canViewMemoryChat(chat, socket)) return;
         socket.join(chatId);
         console.log(`👥 ${socket.data.userName} joined ${chatId}`);
     });

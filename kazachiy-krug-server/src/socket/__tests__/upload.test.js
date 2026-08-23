@@ -19,6 +19,10 @@ function makeAudioBlob() {
     return new Blob([Uint8Array.from([79, 103, 103, 83])], { type: "audio/ogg" });
 }
 
+function makeVideoBlob() {
+    return new Blob([Uint8Array.from([0, 0, 0, 24, 102, 116, 121, 112])], { type: "video/mp4" });
+}
+
 function makeLargeImageBlob() {
     return new Blob([new Uint8Array(16 * 1024 * 1024)], { type: "image/png" });
 }
@@ -108,7 +112,7 @@ test("POST /upload rejects invalid mime type", async () => {
         assert.equal(res.status, 400);
 
         const payload = await res.json();
-        assert.equal(payload.message, "Only image and audio files are allowed");
+        assert.equal(payload.message, "Only image, audio and MP4/WebM video files are allowed");
     } finally {
         await closeServer(server);
     }
@@ -147,6 +151,27 @@ test("POST /upload accepts audio file via 'file' field", async () => {
         assert.equal(payload.mediaType, "audio");
         assert.equal(typeof payload.fileUrl, "string");
         assert.equal(typeof payload.audioUrl, "string");
+
+        await cleanupUploadedFileFromPayload(payload);
+    } finally {
+        await closeServer(server);
+    }
+});
+
+test("POST /upload accepts MP4 video via 'file' field", async () => {
+    const { server, baseUrl } = await createServer();
+
+    try {
+        const form = new FormData();
+        form.append("file", makeVideoBlob(), "clip.mp4");
+
+        const res = await fetch(`${baseUrl}/upload`, { method: "POST", body: form });
+        assert.equal(res.status, 200);
+
+        const payload = await res.json();
+        assert.equal(payload.ok, true);
+        assert.equal(payload.mediaType, "video");
+        assert.equal(typeof payload.videoUrl, "string");
 
         await cleanupUploadedFileFromPayload(payload);
     } finally {

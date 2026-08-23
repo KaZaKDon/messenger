@@ -1,29 +1,49 @@
 import { PrismaClient } from "@prisma/client";
-import { randomUUID } from "node:crypto";
 import { hashPassword } from "../src/auth/password.js";
+import { readAdminBootstrapConfig } from "../src/admin/bootstrapConfig.js";
 
 const prisma = new PrismaClient();
 
-function required(name) {
-    const value = process.env[name]?.trim();
-    if (!value) throw new Error(`${name} is required`);
-    return value;
-}
-
 async function main() {
-    const login = required("ADMIN_LOGIN");
-    const password = required("ADMIN_PASSWORD");
-    const phone = required("ADMIN_PHONE").replace(/\D/g, "");
-    const name = process.env.ADMIN_NICK?.trim() || "Администратор";
-    if (password.length < 12) throw new Error("ADMIN_PASSWORD must contain at least 12 characters");
+    const config = readAdminBootstrapConfig();
+    const user = await prisma.user.findUnique({ where: { id: config.userId } });
+    if (!user) throw new Error(`User ${config.userId} was not found; bootstrap never creates a duplicate account`);
 
-    const user = await prisma.user.findUnique({ where: { login } });
-    const passwordHash = await hashPassword(password);
-    const data = { name, phone: `+${phone}`, passwordHash, status: "active", role: "admin", approvalCode: null };
+    const conflict = await prisma.user.findFirst({
+        where: {
+            id: { not: config.userId },
+            OR: [{ login: config.login }, { email: config.email }],
+        },
+        select: { id: true, login: true, email: true },
+    });
+    if (conflict) throw new Error("ADMIN_LOGIN or ADMIN_EMAIL is already assigned to another user");
 
-    const admin = user
-        ? await prisma.user.update({ where: { id: user.id }, data })
-        : await prisma.user.create({ data: { id: randomUUID(), login, ...data } });
+    const passwordHash = await hashPassword(config.password);
+    const admin = await prisma.$transaction(async (tx) => {
+        const updated = await tx.user.update({
+            where: { id: config.userId },
+            data: {
+                login: config.login,
+                email: config.email,
+                passwordHash,
+                status: "active",
+                role: "admin",
+                approvalCode: null,
+            },
+        });
+
+        await tx.session.deleteMany({ where: { userId: config.userId } });
+        await tx.auditLog.create({
+            data: {
+                adminId: config.userId,
+                action: "admin.bootstrap",
+                targetId: config.userId,
+                details: { source: "bootstrap-admin" },
+            },
+        });
+
+        return updated;
+    });
 
     console.log(`Admin account is ready: ${admin.login}`);
 }

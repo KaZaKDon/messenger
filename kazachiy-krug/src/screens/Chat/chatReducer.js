@@ -24,6 +24,7 @@ function ensureChat(state, chatId) {
             messages: [],
             draft: "",
             typingUsers: [],
+            unreadCount: 0,
         },
     };
 }
@@ -123,6 +124,32 @@ export function chatReducer(state, action) {
         case "SET_USERS":
             return { ...state, users: action.payload };
 
+        case "HYDRATE_PRIVATE_DIALOGS": {
+            const dialogs = Array.isArray(action.payload) ? action.payload : [];
+            let chats = state.chats;
+
+            for (const dialog of dialogs) {
+                if (!dialog?.chatId || dialog.type !== "private") continue;
+                chats = ensureChat({ ...state, chats }, dialog.chatId);
+                const existing = chats[dialog.chatId];
+                chats = {
+                    ...chats,
+                    [dialog.chatId]: {
+                        ...existing,
+                        id: dialog.chatId,
+                        type: "private",
+                        members: dialog.members ?? existing.members ?? [],
+                        membersInfo: dialog.membersInfo ?? existing.membersInfo ?? [],
+                        otherUser: dialog.otherUser ?? existing.otherUser ?? null,
+                        messages: mergeMessages(existing.messages, dialog.messages ?? []),
+                        unreadCount: dialog.unreadCount ?? existing.unreadCount ?? 0,
+                    },
+                };
+            }
+
+            return chats === state.chats ? state : { ...state, chats };
+        }
+
         // ---------- ACTIVE CHAT ----------
         case "SET_ACTIVE_CHAT_USER": {
             const id = action.payload;
@@ -159,6 +186,9 @@ export function chatReducer(state, action) {
                 membersInfo,
                 otherUser,
                 canPublish,
+                contentType,
+                requiresAnnouncementWithImage,
+                advertisementLifetimeDays,
                 hasMoreHistory,
             } = action.payload || {};
 
@@ -177,6 +207,11 @@ export function chatReducer(state, action) {
                         type: type ?? chats[chatId].type ?? "private",
                         title: title ?? chats[chatId].title ?? "",
                         canPublish: canPublish ?? chats[chatId].canPublish ?? true,
+                        contentType: contentType ?? chats[chatId].contentType ?? null,
+                        requiresAnnouncementWithImage: requiresAnnouncementWithImage
+                            ?? chats[chatId].requiresAnnouncementWithImage ?? false,
+                        advertisementLifetimeDays: advertisementLifetimeDays
+                            ?? chats[chatId].advertisementLifetimeDays ?? null,
                         members: members ?? chats[chatId].members ?? [],
                         membersInfo: membersInfo ?? chats[chatId].membersInfo ?? [],
                         otherUser: otherUser ?? chats[chatId].otherUser ?? null,
@@ -184,6 +219,7 @@ export function chatReducer(state, action) {
                         historyLoading: false,
                         historyNotice: "",
                         messages: mergedMessages,
+                        unreadCount: 0,
                         typingUsers: chats[chatId].typingUsers ?? [],
                     },
                 },
@@ -303,7 +339,7 @@ export function chatReducer(state, action) {
 
         // ---------- MESSAGES ----------
         case "RECEIVE_MESSAGE": {
-            const { chatId, message } = action.payload;
+            const { chatId, message, currentUserId } = action.payload;
             if (!chatId || !message?.id) return state;
 
             const chats = ensureChat(state, chatId);
@@ -317,6 +353,10 @@ export function chatReducer(state, action) {
                         ? mergeMessage(existingMessage, message)
                         : existingMessage
                 );
+            const isNewIncoming = existingMessageIndex === -1
+                && currentUserId
+                && message.senderId !== currentUserId
+                && state.activeChatId !== chatId;
 
             return {
                 ...state,
@@ -325,6 +365,7 @@ export function chatReducer(state, action) {
                     [chatId]: {
                         ...chat,
                         messages,
+                        unreadCount: isNewIncoming ? (chat.unreadCount ?? 0) + 1 : (state.activeChatId === chatId ? 0 : chat.unreadCount ?? 0),
                     },
                 },
             };
@@ -346,6 +387,21 @@ export function chatReducer(state, action) {
                         messages: chat.messages.filter((m) => m.id !== messageId),
                     },
                 },
+            };
+        }
+
+        case "DELETE_PRIVATE_CHAT": {
+            const { chatId } = action.payload || {};
+            if (!chatId) return state;
+
+            const chats = { ...state.chats };
+            delete chats[chatId];
+
+            return {
+                ...state,
+                chats,
+                activeChatId: state.activeChatId === chatId ? null : state.activeChatId,
+                activeChatUserId: state.activeChatId === chatId ? null : state.activeChatUserId,
             };
         }
 

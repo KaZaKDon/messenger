@@ -2,6 +2,7 @@ import {  useEffect,useState } from "react";
 import AppRouter from "./router";
 
 import { connectSocket } from "../shared/socket";
+import RouteSeoManager from "../shared/RouteSeoManager";
 
 export default function App() {
     const [currentUser, setCurrentUser] = useState(() => {
@@ -58,6 +59,7 @@ export default function App() {
 
     return (
         <div className="app">
+            <RouteSeoManager />
             <AppRouter
                 currentUser={currentUser}
                 setCurrentUser={setCurrentUser}

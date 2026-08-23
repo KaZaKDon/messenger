@@ -7,16 +7,17 @@
 .app-frame-content {
     flex: 1;
     min-width: 0;
+    min-height: 0;
+}
+
+.app-frame-mobile-bar {
+    display: none;
 }
 
 .app-frame-drawer-button {
     display: none;
-    position: fixed;
-    top: 10px;
-    left: 10px;
-    z-index: 130;
-    width: 44px;
-    height: 44px;
+    width: 42px;
+    height: 42px;
     border: 1px solid var(--border-light);
     border-radius: 12px;
     background: var(--bg-card);
@@ -31,17 +32,34 @@
 
 .incoming-call-modal {
     position: fixed;
-    right: 20px;
-    bottom: 20px;
-    z-index: 250;
-    min-width: 280px;
+    inset: 0;
+    z-index: 1400;
     display: grid;
-    gap: 8px;
-    padding: 14px;
-    border-radius: 14px;
-    border: 1px solid var(--border-light);
-    background: var(--bg-card);
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+    align-content: center;
+    justify-items: center;
+    gap: 12px;
+    padding: 20px;
+    background: color-mix(in srgb, var(--bg-main) 94%, transparent);
+    text-align: center;
+}
+
+.incoming-call-avatar {
+    display: grid;
+    place-items: center;
+    width: 84px;
+    height: 84px;
+    overflow: hidden;
+    border-radius: 50%;
+    background: var(--color-accent);
+    color: white;
+    font-size: 30px;
+    font-weight: 800;
+}
+
+.incoming-call-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 .incoming-call-actions {
@@ -60,13 +78,49 @@
 
 @media (max-width: 1199px) {
     .app-frame {
+        height: 100dvh;
         min-height: 100dvh;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .app-frame-mobile-bar {
+        position: relative;
+        z-index: 110;
+        display: flex;
+        align-items: center;
+        flex: 0 0 56px;
+        min-height: 56px;
+        border-bottom: 1px solid var(--border-light);
+        padding: 7px 10px;
+        background: var(--bg-main);
+    }
+
+    .app-frame-mobile-logo {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 62px;
+        height: 48px;
+        object-fit: contain;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
     }
 
     .app-frame-drawer-button {
         display: inline-flex;
         align-items: center;
         justify-content: center;
+        position: relative;
+        z-index: 1;
+    }
+
+    .app-frame-content {
+        flex: 1 1 auto;
+        width: 100%;
+        height: calc(100dvh - 56px);
+        min-height: 0;
+        overflow-y: auto;
     }
 
     .app-frame-backdrop {

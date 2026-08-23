@@ -10,24 +10,53 @@ const ALL_USERS = Object.keys(usersById);
  */
 const GROUP_CONFIG = [
     // group-1..3: только выбранные пишут (пока дефолт — user-1)
-    { id: "group-1", title: "Нужное", mode: "readonly", canPublish: ["user-1"] },
-    { id: "group-2", title: "Администрация", mode: "readonly", canPublish: ["user-1"] },
-    { id: "group-3", title: "Музеи", mode: "readonly", canPublish: ["user-1"] },
+    {
+        id: "group-1",
+        title: "Нужное",
+        mode: "readonly",
+        visibility: "public",
+        publishPolicy: "admin_moderator",
+        canPublish: ["user-1"],
+    },
+    {
+        id: "group-2",
+        title: "Администрация",
+        mode: "readonly",
+        visibility: "public",
+        publishPolicy: "selected_authors",
+        canPublish: ["user-1"],
+    },
+    {
+        id: "group-3",
+        title: "Музеи",
+        mode: "readonly",
+        visibility: "public",
+        publishPolicy: "selected_authors",
+        canPublish: ["user-1"],
+    },
 
     // group-4..10: объявления (требуем текст + картинку)
-    { id: "group-4", title: "Недвижимость", mode: "announcements", requiresAnnouncementWithImage: true },
-    { id: "group-5", title: "Домашние животные", mode: "announcements", requiresAnnouncementWithImage: true },
-    { id: "group-6", title: "Сад и Огород", mode: "announcements", requiresAnnouncementWithImage: true },
-    { id: "group-7", title: "Сельскохозяйственные животные", mode: "announcements", requiresAnnouncementWithImage: true },
-    { id: "group-8", title: "Транспорт", mode: "announcements", requiresAnnouncementWithImage: true },
-    { id: "group-9", title: "Строительство Стройматериалы", mode: "announcements", requiresAnnouncementWithImage: true },
-    { id: "group-10", title: "Личные вещи", mode: "announcements", requiresAnnouncementWithImage: true },
-    { id: "group-11", title: "Услуги", mode: "announcements", requiresAnnouncementWithImage: true },
+    { id: "group-4", title: "Недвижимость", mode: "announcements", requiresAnnouncementWithImage: false },
+    { id: "group-5", title: "Домашние животные", mode: "announcements", requiresAnnouncementWithImage: false },
+    { id: "group-6", title: "Сад и Огород", mode: "announcements", requiresAnnouncementWithImage: false },
+    { id: "group-7", title: "Сельскохозяйственные животные", mode: "announcements", requiresAnnouncementWithImage: false },
+    { id: "group-8", title: "Транспорт", mode: "announcements", requiresAnnouncementWithImage: false },
+    { id: "group-9", title: "Строительство Стройматериалы", mode: "announcements", requiresAnnouncementWithImage: false },
+    { id: "group-10", title: "Личные вещи", mode: "announcements", requiresAnnouncementWithImage: false },
+    { id: "group-11", title: "Услуги", mode: "announcements", requiresAnnouncementWithImage: false },
 
     // group-11: обычный общий чат
     { id: "group-12", title: "ПОБОЛТАЕМ", mode: "chat" },
     // group-12: закрытая группа "010" (видят только user-1 и user-3)
-    { id: "group-13", title: "010", mode: "chat", members: ["user-1", "user-7"], canPublish: ["user-1", "user-7"] },
+    {
+        id: "group-13",
+        title: "010",
+        mode: "chat",
+        visibility: "private",
+        publishPolicy: "members",
+        members: ["user-1", "user-7"],
+        canPublish: ["user-1", "user-7"],
+    },
 ];
 
 const ANNOUNCEMENT_MODE_ENABLED = true;
@@ -52,6 +81,9 @@ function buildGroup(cfg = {}) {
         roomId: id,
         title: cfg.title,
         mode,
+        visibility: cfg.visibility ?? "public",
+        publishPolicy: cfg.publishPolicy ?? "members",
+        status: "active",
         members,
         canPublish,
         requiresAnnouncementWithImage:

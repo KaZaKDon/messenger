@@ -1,31 +1,39 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { API_BASE_URL } from "../../../shared/config";
+import { fetchSettlements } from "../../../shared/advertisementsApi";
 
-const API_BASE = "http://localhost:3000";
-const MAX_IMAGES = 5;
+const MAX_IMAGES = 7;
 
 async function uploadOne(file) {
     const fd = new FormData();
     fd.append("image", file);
 
-    const res = await fetch(`${API_BASE}/upload`, { method: "POST", body: fd });
+    const res = await fetch(`${API_BASE_URL}/upload`, { method: "POST", body: fd });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
     return data.imageUrl;
 }
 
-export default function AnnouncementComposer({ disabled, onSubmit }) {
+export default function AnnouncementComposer({ disabled, imageRequired = false, initialAdvertisement = null, onSubmit }) {
     const fileRef = useRef(null);
 
-    const [title, setTitle] = useState("");
-    const [place, setPlace] = useState(""); // ✅ населённый пункт
-    const [price, setPrice] = useState("");
-    const [text, setText] = useState("");
-    const [images, setImages] = useState([]); // [{file, preview}]
+    const [title, setTitle] = useState(initialAdvertisement?.title ?? "");
+    const [place, setPlace] = useState(initialAdvertisement?.settlement ?? "");
+    const [price, setPrice] = useState(initialAdvertisement?.price ?? "");
+    const [text, setText] = useState(initialAdvertisement?.description ?? "");
+    const [images, setImages] = useState(() => (initialAdvertisement?.images ?? []).map((image) => ({ url: image.url, preview: image.url })));
     const [uploading, setUploading] = useState(false);
+    const [settlements, setSettlements] = useState([]);
+    const [settlementError, setSettlementError] = useState("");
+
+    useEffect(() => {
+        fetchSettlements().then(setSettlements).catch((error) => setSettlementError(error.message));
+    }, []);
 
     const canSend = useMemo(() => {
-        return title.trim() && text.trim() && images.length > 0 && !uploading;
-    }, [title, text, images.length, uploading]);
+        return title.trim() && place.trim() && text.trim()
+            && (!imageRequired || images.length > 0) && !uploading;
+    }, [imageRequired, title, place, text, images.length, uploading]);
 
     const pickImages = (e) => {
         const files = Array.from(e.target.files || []);
@@ -60,18 +68,15 @@ export default function AnnouncementComposer({ disabled, onSubmit }) {
         try {
             const imageUrls = [];
             for (const it of images) {
-                imageUrls.push(await uploadOne(it.file));
+                imageUrls.push(it.file ? await uploadOne(it.file) : it.url);
             }
 
-            const composedText =
-                `🧾 ${title.trim()}\n` +
-                (place.trim() ? `📍 ${place.trim()}\n` : "") +
-                (price.trim() ? `💰 Цена: ${price.trim()}\n` : "") +
-                `\n${text.trim()}`;
-
-            onSubmit({
-                text: composedText,
-                imageUrls,
+            await onSubmit({
+                title: title.trim(),
+                settlement: place.trim(),
+                price: price.trim() || null,
+                description: text.trim(),
+                images: imageUrls.map((url, sortOrder) => ({ url, sortOrder })),
             });
 
             images.forEach((it) => it.preview && URL.revokeObjectURL(it.preview));
@@ -80,6 +85,8 @@ export default function AnnouncementComposer({ disabled, onSubmit }) {
             setPrice("");
             setText("");
             setImages([]);
+        } catch (error) {
+            window.alert(error?.message ?? "Не удалось опубликовать объявление");
         } finally {
             setUploading(false);
         }
@@ -88,8 +95,8 @@ export default function AnnouncementComposer({ disabled, onSubmit }) {
     return (
         <div className="announce">
             <div className="announce-head">
-                <div className="announce-title">Подача объявления</div>
-                <div className="announce-sub">Для кругов 4–10: текст + минимум 1 фото</div>
+                <div className="announce-title">{initialAdvertisement ? "Редактирование объявления" : "Подача объявления"}</div>
+                <div className="announce-sub">Фотографии необязательны, можно добавить до {MAX_IMAGES}</div>
             </div>
 
             <div className="announce-form">
@@ -104,13 +111,18 @@ export default function AnnouncementComposer({ disabled, onSubmit }) {
                 </label>
 
                 <label className="announce-field">
-                    <div className="announce-label">Населённый пункт</div>
+                    <div className="announce-label">Населённый пункт *</div>
                     <input
+                        list="settlement-options"
                         value={place}
                         onChange={(e) => setPlace(e.target.value)}
                         disabled={disabled || uploading}
-                        placeholder="Например: Станица Новая"
+                        placeholder="Начните вводить название"
                     />
+                    <datalist id="settlement-options">
+                        {settlements.map((settlement) => <option key={settlement.id} value={settlement.name} />)}
+                    </datalist>
+                    {settlementError ? <small>{settlementError}</small> : null}
                 </label>
 
                 <label className="announce-field">
@@ -135,7 +147,7 @@ export default function AnnouncementComposer({ disabled, onSubmit }) {
                 </label>
 
                 <div className="announce-photos">
-                    <div className="announce-label">Фото * (до {MAX_IMAGES})</div>
+                    <div className="announce-label">Фото {imageRequired ? "* " : ""}(до {MAX_IMAGES})</div>
 
                     <div className="announce-photo-grid">
                         {images.map((it, idx) => (
@@ -180,7 +192,7 @@ export default function AnnouncementComposer({ disabled, onSubmit }) {
                     onClick={send}
                     disabled={disabled || !canSend}
                 >
-                    {uploading ? "Загрузка…" : "Опубликовать"}
+                    {uploading ? "Загрузка…" : (initialAdvertisement ? "Сохранить изменения" : "Опубликовать")}
                 </button>
             </div>
         </div>

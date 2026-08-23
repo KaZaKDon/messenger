@@ -8,6 +8,8 @@
         "migrate:deploy": "prisma migrate deploy",
         "prisma:seed": "node prisma/seed.js",
         "seed:history": "node prisma/seed-history.js",
+        "admin:bootstrap": "node --env-file-if-exists=.env prisma/bootstrap-admin.js",
+        "db:cleanup:legacy-users": "node --env-file-if-exists=.env prisma/cleanup-legacy-users.js",
         "db:setup": "npm run migrate:deploy && npm run prisma:seed && npm run seed:history",
         "db:setup:full": "npm run prisma:generate && npm run db:setup",
         "lint": "find src prisma -name '*.js' -print0 | xargs -0 -n1 node --check",

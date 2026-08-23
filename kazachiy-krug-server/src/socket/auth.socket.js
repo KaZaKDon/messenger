@@ -5,23 +5,16 @@ import { chats } from "../store/chats.js";
 import { prisma } from "../db/prisma.js";
 import { SOCKET_MEMORY_FALLBACK_ENABLED } from "../config/runtimeFlags.js";
 import { findSessionUser } from "../auth/session.js";
+import { canViewGroup } from "../groups/groupAccessPolicy.js";
+import { GROUP_RULE_ACCESS_SELECT } from "../groups/groupAccessRepository.js";
 
 function emitPresence(io, userId, isOnline) {
     io.emit("user:online", { userId, isOnline });
 }
 
-function isGroupId(id) {
-    return typeof id === "string" && id.startsWith("group-");
-}
-
 function groupNumber(id) {
     const n = Number(String(id).split("-")[1]);
     return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
-}
-
-function isAnnouncementGroup(id) {
-    if (!isGroupId(id)) return false;
-    return GROUP_RULES[id]?.mode === "announcements";
 }
 
 async function authenticateSocketUser(io, socket, user, extra = {}) {
@@ -51,17 +44,17 @@ async function authenticateSocketUser(io, socket, user, extra = {}) {
         name: user.name,
         phone: user.phone,
         avatar: user.avatar,
+        role: user.role,
         ...extra,
     });
 }
 
 function listFromMemory(currentUserId) {
     const groups = Object.values(GROUP_RULES)
-        .filter(
-            (group) =>
-                group?.members?.includes(currentUserId) ||
-                isAnnouncementGroup(group?.id)
-        )
+        .filter((group) => canViewGroup({
+            rule: group,
+            isMember: group?.members?.includes(currentUserId),
+        }))
         .sort((a, b) => groupNumber(a.id) - groupNumber(b.id))
         .map((group) => ({
             id: group.id,
@@ -82,27 +75,33 @@ function listFromMemory(currentUserId) {
     return [...groups, ...users];
 }
 
-async function listFromDb(currentUserId) {
+async function listFromDb(currentUser) {
     const [groups, users] = await Promise.all([
         prisma.chat.findMany({
             where: {
                 type: "group",
-                members: {
-                    some: {
-                        userId: currentUserId,
-                    },
-                },
             },
             select: {
                 id: true,
                 title: true,
+                members: {
+                    where: {
+                        userId: currentUser.id,
+                    },
+                    select: {
+                        userId: true,
+                    },
+                },
+                groupRule: {
+                    select: GROUP_RULE_ACCESS_SELECT,
+                },
             },
         }),
         prisma.user.findMany({
             where: {
                 status: "active",
                 id: {
-                    not: currentUserId,
+                    not: currentUser.id,
                 },
             },
             select: {
@@ -115,6 +114,10 @@ async function listFromDb(currentUserId) {
     ]);
 
     const mappedGroups = groups
+        .filter((group) => canViewGroup({
+            rule: group.groupRule,
+            isMember: group.members.length > 0,
+        }))
         .sort((a, b) => groupNumber(a.id) - groupNumber(b.id))
         .map((group) => ({
             id: group.id,
@@ -135,27 +138,40 @@ async function listFromDb(currentUserId) {
 
 /**
  * После успешной авторизации сокет подключается ко всем групповым
- * комнатам, участником которых является пользователь.
+ * комнатам, которые пользователь имеет право видеть.
  */
 async function joinUserGroupRoomsDb(socket) {
-    const userId = socket.data.userId;
-    if (!userId) return;
+    const user = socket.data.user;
+    if (!user?.id) return;
 
     const groups = await prisma.chat.findMany({
         where: {
             type: "group",
-            members: {
-                some: {
-                    userId,
-                },
-            },
         },
         select: {
             id: true,
+            members: {
+                where: {
+                    userId: user.id,
+                },
+                select: {
+                    userId: true,
+                },
+            },
+            groupRule: {
+                select: GROUP_RULE_ACCESS_SELECT,
+            },
         },
     });
 
     for (const group of groups) {
+        const canView = canViewGroup({
+            rule: group.groupRule,
+            isMember: group.members.length > 0,
+        });
+
+        if (!canView) continue;
+
         if (group?.id && !socket.rooms.has(group.id)) {
             socket.join(group.id);
         }
@@ -167,9 +183,10 @@ function joinUserGroupRoomsMemory(socket) {
     if (!userId) return;
 
     for (const group of Object.values(GROUP_RULES)) {
-        const canJoin =
-            group?.members?.includes(userId) ||
-            isAnnouncementGroup(group?.id);
+        const canJoin = canViewGroup({
+            rule: group,
+            isMember: group?.members?.includes(userId),
+        });
 
         if (!canJoin) continue;
 
@@ -232,7 +249,7 @@ export function authSocket(io, socket) {
         if (!socket.data.isAuth) return;
 
         try {
-            const list = await listFromDb(socket.data.userId);
+            const list = await listFromDb(socket.data.user);
             socket.emit("users:list", list);
         } catch (error) {
             console.error(

@@ -62,7 +62,6 @@ export default function Calls({ currentUser }) {
     const [callHistory, setCallHistory] = useState(() => readCallHistory(storageKey));
     const [activeCall, setActiveCall] = useState(null);
     const [callError, setCallError] = useState("");
-    const [lastStartedMeta, setLastStartedMeta] = useState(null);
 
     useEffect(() => {
         setCallHistory(readCallHistory(storageKey));
@@ -96,24 +95,7 @@ export default function Calls({ currentUser }) {
     const startCall = (contact, type) => {
         if (!currentUser?.id) return;
         setCallError("");
-
-        const chatId = buildPrivateRoomId(currentUser.id, contact.id);
-        if (activeCall?.chatId === chatId && ["initiated", "ringing", "connected"].includes(activeCall.status)) {
-            setCallError("В этом чате уже есть активный звонок");
-            return;
-        }
-        const socket = connectSocket();
-
-        setLastStartedMeta({
-            callAttemptId: createCallId(),
-            contactId: contact.id,
-            contactName: contact.name,
-            chatId,
-            type
-        });
-
-        socket.emit("call:start", { chatId, type, targetUserId: contact.id });
-        navigate(`/chat?user=${encodeURIComponent(contact.id)}`);
+        navigate(`/chat?user=${encodeURIComponent(contact.id)}&call=${type}`);
     };
 
     const clearHistory = () => {
@@ -126,15 +108,15 @@ export default function Calls({ currentUser }) {
         if (!socket || !currentUser?.id) return;
 
         const onCallStarted = (payload = {}) => {
-            const fallbackContact = contactsById[lastStartedMeta?.contactId];
+            const fallbackContact = contacts.find((contact) => buildPrivateRoomId(currentUser.id, contact.id) === payload.chatId);
             setActiveCall({
                 callId: payload.callId,
                 chatId: payload.chatId,
-                type: payload.type ?? lastStartedMeta?.type ?? "audio",
+                type: payload.type ?? "audio",
                 status: payload.status ?? "initiated",
                 direction: "outgoing",
-                contactId: fallbackContact?.id ?? lastStartedMeta?.contactId ?? null,
-                contactName: fallbackContact?.name ?? lastStartedMeta?.contactName ?? "Контакт",
+                contactId: fallbackContact?.id ?? null,
+                contactName: fallbackContact?.name ?? "Контакт",
             });
         };
 
@@ -243,7 +225,7 @@ export default function Calls({ currentUser }) {
             socket.off("call:error", onCallError);
             socket.off("call:history", onCallHistory);
         };
-    }, [appendHistory, contacts, contactsById, currentUser?.id, lastStartedMeta, storageKey]);
+    }, [appendHistory, contacts, contactsById, currentUser?.id, storageKey]);
 
     const handleAcceptCall = () => {
         if (!activeCall?.callId) return;

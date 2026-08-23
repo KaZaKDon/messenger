@@ -12,4 +12,5 @@ export const SOCKET_URL = trimTrailingSlashes(
     import.meta.env.VITE_SOCKET_URL ?? API_BASE_URL
 );
 
-export const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE ?? "+7 900 000-00-00";
+export const ADMIN_PHONE = import.meta.env.VITE_ADMIN_PHONE ?? "+79381532981";
+export const ADMIN_PHONE_DISPLAY = import.meta.env.VITE_ADMIN_PHONE_DISPLAY ?? "8 (938) 153-29-81";

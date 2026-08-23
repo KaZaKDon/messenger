@@ -1,0 +1,14 @@
+.admin-settlements-page { padding: 28px 34px; color: var(--color-primary); }
+.admin-settlements-page > header { display: flex; justify-content: space-between; align-items: start; gap: 20px; }
+.admin-settlements-page h1 { margin: 0; font-size: 42px; }
+.admin-settlements-page p { color: var(--color-muted); }
+.admin-settlement-add { display: flex; gap: 10px; margin: 24px 0 12px; }
+.admin-settlement-add input, .admin-settlement-search { min-height: 44px; border: 1px solid var(--border-light); border-radius: 10px; padding: 0 14px; background: var(--bg-card); color: inherit; }
+.admin-settlement-add input { flex: 1; }
+.admin-settlement-search { width: 100%; }
+.admin-settlement-list { display: grid; gap: 10px; margin-top: 18px; }
+.admin-settlement-list article { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 16px; border: 1px solid var(--border-light); border-radius: 12px; background: var(--bg-card); }
+.admin-settlement-list article div { display: flex; gap: 10px; align-items: center; }
+.admin-settlement-list small { color: var(--color-muted); }
+.admin-settlement-error { color: #a63732 !important; }
+@media (max-width: 720px) { .admin-settlements-page { padding: 18px; } .admin-settlement-add, .admin-settlement-list article { align-items: stretch; flex-direction: column; } }

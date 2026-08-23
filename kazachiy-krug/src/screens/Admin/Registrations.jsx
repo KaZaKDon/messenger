@@ -1,23 +1,33 @@
 import { useCallback, useEffect, useState } from "react";
 import { API_BASE_URL } from "../../shared/config";
+import RegistrationCard from "./components/RegistrationCard";
+import RejectRegistrationModal from "./components/RejectRegistrationModal";
+import { useAdminSummaryContext } from "./adminSummaryContext";
 import "./admin.css";
+
+async function fetchRegistrationRequests() {
+    const token = sessionStorage.getItem("accessToken");
+    const response = await fetch(`${API_BASE_URL}/admin/registrations`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Не удалось загрузить заявки");
+    return payload;
+}
 
 export default function Registrations() {
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [processingId, setProcessingId] = useState(null);
+    const [rejectionRequest, setRejectionRequest] = useState(null);
+    const { refresh: refreshSummary } = useAdminSummaryContext();
 
     const loadRequests = useCallback(async () => {
         setLoading(true);
         setError("");
         try {
-            const token = sessionStorage.getItem("accessToken");
-            const response = await fetch(`${API_BASE_URL}/admin/registrations`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            const payload = await response.json();
-            if (!response.ok) throw new Error(payload.error || "Не удалось загрузить заявки");
-            setRequests(payload);
+            setRequests(await fetchRegistrationRequests());
         } catch (requestError) {
             setError(requestError.message);
         } finally {
@@ -26,26 +36,47 @@ export default function Registrations() {
     }, []);
 
     useEffect(() => {
-        loadRequests();
-    }, [loadRequests]);
+        let active = true;
 
-    const decide = async (userId, decision) => {
+        fetchRegistrationRequests()
+            .then((payload) => {
+                if (active) setRequests(payload);
+            })
+            .catch((requestError) => {
+                if (active) setError(requestError.message);
+            })
+            .finally(() => {
+                if (active) setLoading(false);
+            });
+
+        return () => {
+            active = false;
+        };
+    }, []);
+
+    const decide = async (request, decision, reason = null) => {
         setError("");
+        setProcessingId(request.id);
         try {
             const token = sessionStorage.getItem("accessToken");
-            const response = await fetch(`${API_BASE_URL}/admin/registrations/${encodeURIComponent(userId)}`, {
+            const response = await fetch(`${API_BASE_URL}/admin/registrations/${encodeURIComponent(request.id)}`, {
                 method: "PATCH",
                 headers: {
                     Authorization: `Bearer ${token}`,
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ decision }),
+                body: JSON.stringify({ decision, reason }),
             });
             const payload = await response.json();
             if (!response.ok) throw new Error(payload.error || "Не удалось обработать заявку");
-            setRequests((current) => current.filter((request) => request.id !== userId));
+            setRequests((current) => current.filter((item) => item.id !== request.id));
+            await refreshSummary();
+            return true;
         } catch (requestError) {
             setError(requestError.message);
+            return false;
+        } finally {
+            setProcessingId(null);
         }
     };
 
@@ -65,21 +96,25 @@ export default function Registrations() {
 
             <div className="admin-registration-list">
                 {requests.map((request) => (
-                    <article className="admin-registration-card" key={request.id}>
-                        <div>
-                            <h2>{request.name}</h2>
-                            <p><span>Логин:</span> {request.login}</p>
-                            <p><span>Телефон:</span> <a href={`tel:${request.phone}`}>{request.phone}</a></p>
-                            <p><span>Код:</span> <strong>{request.approvalCode}</strong></p>
-                            <p><span>Создана:</span> {new Date(request.createdAt).toLocaleString("ru-RU")}</p>
-                        </div>
-                        <div className="admin-registration-actions">
-                            <button className="approve" type="button" onClick={() => decide(request.id, "approve")}>Подтвердить</button>
-                            <button className="reject" type="button" onClick={() => decide(request.id, "reject")}>Отклонить</button>
-                        </div>
-                    </article>
+                    <RegistrationCard
+                        key={request.id}
+                        request={request}
+                        processing={processingId === request.id}
+                        onApprove={(item) => decide(item, "approve")}
+                        onReject={setRejectionRequest}
+                    />
                 ))}
             </div>
+
+            {rejectionRequest ? (
+                <RejectRegistrationModal
+                    key={rejectionRequest.id}
+                    request={rejectionRequest}
+                    processing={processingId === rejectionRequest.id}
+                    onClose={() => setRejectionRequest(null)}
+                    onConfirm={(item, reason) => decide(item, "reject", reason)}
+                />
+            ) : null}
         </section>
     );
 }

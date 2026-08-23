@@ -13,6 +13,8 @@ const io = new Server(server, {
     },
 });
 
+app.set("io", io);
+
 initSocket(io);
 
 server.listen(env.port, "0.0.0.0", () => {

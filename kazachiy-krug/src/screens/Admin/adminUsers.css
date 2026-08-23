@@ -1,0 +1,585 @@
+.admin-user-list {
+    display: grid;
+    gap: 18px;
+}
+
+.admin-user-counters {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.admin-user-counters button {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 1px solid var(--border-light);
+    border-radius: 13px;
+    padding: 15px;
+    background: var(--bg-card);
+    color: var(--color-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.admin-user-counters button.active {
+    border-color: rgba(122, 46, 46, 0.5);
+    background: rgba(122, 46, 46, 0.09);
+}
+
+.admin-user-counters span {
+    min-width: 0;
+    color: var(--color-muted);
+    font-size: 13px;
+}
+
+.admin-user-counters strong {
+    color: var(--color-accent);
+    font-size: 24px;
+}
+
+.admin-user-toolbar {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) minmax(190px, 240px) auto;
+    gap: 10px;
+}
+
+.admin-user-toolbar label {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    border: 1px solid var(--border-light);
+    border-radius: 11px;
+    padding: 0 12px;
+    background: var(--bg-card);
+}
+
+.admin-user-toolbar input,
+.admin-user-toolbar select,
+.admin-user-toolbar button {
+    min-height: 44px;
+    border: 1px solid var(--border-light);
+    border-radius: 11px;
+    background: var(--bg-card);
+    color: var(--color-primary);
+    font: inherit;
+}
+
+.admin-user-toolbar input {
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+}
+
+.admin-user-toolbar select {
+    padding: 0 12px;
+}
+
+.admin-user-toolbar button {
+    padding: 0 16px;
+    cursor: pointer;
+}
+
+.admin-user-toolbar button:disabled {
+    cursor: wait;
+    opacity: 0.6;
+}
+
+.admin-user-error {
+    margin: 0;
+    border: 1px solid rgba(180, 35, 24, 0.25);
+    border-radius: 11px;
+    padding: 11px 13px;
+    background: rgba(180, 35, 24, 0.08);
+    color: #b42318;
+}
+
+:root[data-theme="dark"] .admin-user-error {
+    color: #ff9f96;
+}
+
+.admin-user-table-wrap {
+    overflow: hidden;
+    border: 1px solid var(--border-light);
+    border-radius: 15px;
+    background: var(--bg-card);
+}
+
+.admin-user-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.admin-user-table th,
+.admin-user-table td {
+    padding: 14px 15px;
+    border-bottom: 1px solid var(--border-light);
+    text-align: left;
+    vertical-align: middle;
+}
+
+.admin-user-table th {
+    color: var(--color-muted);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.admin-user-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.admin-user-table tbody tr:hover {
+    background: rgba(122, 46, 46, 0.035);
+}
+
+.admin-user-identity {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.admin-user-identity > div:last-child,
+.admin-user-table td:nth-child(2) {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+}
+
+.admin-user-identity small,
+.admin-user-table td small {
+    overflow-wrap: anywhere;
+    color: var(--color-muted);
+    font-size: 12px;
+}
+
+.admin-user-table a,
+.admin-user-details-list a {
+    color: var(--color-accent);
+}
+
+.admin-user-avatar {
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border-radius: 50%;
+    background: rgba(122, 46, 46, 0.12);
+    color: var(--color-accent);
+    font-weight: 800;
+}
+
+.admin-user-avatar.large {
+    width: 54px;
+    height: 54px;
+    flex-basis: 54px;
+    font-size: 21px;
+}
+
+.admin-user-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.admin-user-status {
+    width: fit-content;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 5px 9px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.admin-user-status.status-active {
+    background: rgba(38, 122, 59, 0.12);
+    color: #267a3b;
+}
+
+.admin-user-status.status-pending {
+    background: rgba(169, 105, 12, 0.13);
+    color: #92600f;
+}
+
+.admin-user-status.status-blocked,
+.admin-user-status.status-deleted,
+.admin-user-status.status-rejected {
+    background: rgba(165, 43, 43, 0.11);
+    color: #a52b2b;
+}
+
+:root[data-theme="dark"] .admin-user-status.status-active {
+    color: #83d896;
+}
+
+:root[data-theme="dark"] .admin-user-status.status-pending {
+    color: #f0c36e;
+}
+
+:root[data-theme="dark"] .admin-user-status.status-blocked,
+:root[data-theme="dark"] .admin-user-status.status-deleted,
+:root[data-theme="dark"] .admin-user-status.status-rejected {
+    color: #ff9f96;
+}
+
+.admin-user-row-action {
+    text-align: right !important;
+}
+
+.admin-user-row-action button {
+    border: 1px solid var(--border-light);
+    border-radius: 9px;
+    padding: 8px 11px;
+    background: var(--bg-main);
+    color: var(--color-primary);
+    font: inherit;
+    cursor: pointer;
+}
+
+.admin-user-empty,
+.admin-user-loading {
+    min-height: 160px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 24px;
+    color: var(--color-muted);
+    text-align: center;
+}
+
+.admin-user-empty strong {
+    color: var(--color-primary);
+}
+
+.admin-user-drawer-backdrop,
+.admin-user-action-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    background: rgba(19, 16, 14, 0.58);
+    backdrop-filter: blur(3px);
+}
+
+.admin-user-drawer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: min(100%, 510px);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 24px;
+    background: var(--bg-card);
+    color: var(--color-primary);
+    box-shadow: -18px 0 55px rgba(0, 0, 0, 0.24);
+}
+
+.admin-user-drawer header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 13px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.admin-user-drawer h2 {
+    margin: 0 0 7px;
+    font-size: 24px;
+}
+
+.admin-user-drawer-close {
+    align-self: start;
+    border: 0;
+    padding: 8px;
+    background: transparent;
+    color: var(--color-muted);
+    font-size: 18px;
+    cursor: pointer;
+}
+
+.admin-user-details-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 13px;
+    margin: 22px 0;
+}
+
+.admin-user-details-list > div {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+    border: 1px solid var(--border-light);
+    border-radius: 11px;
+    padding: 12px;
+    background: var(--bg-main);
+}
+
+.admin-user-details-list > div.wide {
+    grid-column: 1 / -1;
+}
+
+.admin-user-details-list dt {
+    color: var(--color-muted);
+    font-size: 12px;
+}
+
+.admin-user-details-list dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+    line-height: 1.4;
+}
+
+.admin-user-drawer-actions {
+    display: grid;
+    gap: 9px;
+    margin-top: auto;
+}
+
+.admin-user-drawer-actions button,
+.admin-user-action-buttons button {
+    min-height: 44px;
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    padding: 10px 14px;
+    background: var(--bg-main);
+    color: var(--color-primary);
+    font: inherit;
+    cursor: pointer;
+}
+
+.admin-user-drawer-actions .action-block,
+.admin-user-action-buttons .confirm-block,
+.admin-user-drawer-actions .action-delete,
+.admin-user-action-buttons .confirm-delete {
+    border-color: transparent;
+    background: #a52b2b;
+    color: #fff;
+}
+
+.admin-user-drawer-actions .action-unblock,
+.admin-user-action-buttons .confirm-unblock {
+    border-color: transparent;
+    background: #267a3b;
+    color: #fff;
+}
+
+.admin-user-protected-note {
+    margin-top: auto;
+    border: 1px dashed var(--border-light);
+    border-radius: 11px;
+    padding: 14px;
+    color: var(--color-muted);
+    text-align: center;
+}
+
+.admin-user-action-backdrop {
+    display: grid;
+    place-items: center;
+    padding: 18px;
+    z-index: 320;
+}
+
+.admin-user-action-dialog {
+    width: min(100%, 520px);
+    display: grid;
+    gap: 12px;
+    border: 1px solid var(--border-light);
+    border-radius: 17px;
+    padding: 24px;
+    background: var(--bg-card);
+    color: var(--color-primary);
+    box-shadow: 0 25px 75px rgba(0, 0, 0, 0.3);
+}
+
+.admin-user-action-dialog h2,
+.admin-user-action-dialog p {
+    margin: 0;
+}
+
+.admin-user-action-dialog p {
+    color: var(--color-muted);
+    line-height: 1.45;
+}
+
+.admin-user-action-dialog label {
+    display: grid;
+    gap: 7px;
+    font-weight: 700;
+}
+
+.admin-user-action-dialog textarea {
+    width: 100%;
+    resize: vertical;
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    padding: 11px;
+    outline: 0;
+    background: var(--bg-main);
+    color: var(--color-primary);
+    font: inherit;
+}
+
+.admin-user-action-dialog textarea:focus {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px rgba(122, 46, 46, 0.13);
+}
+
+.admin-user-action-dialog small {
+    color: var(--color-muted);
+    font-weight: 400;
+    text-align: right;
+}
+
+.admin-user-action-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 9px;
+    margin-top: 5px;
+}
+
+.admin-user-action-buttons button:disabled {
+    cursor: wait;
+    opacity: 0.55;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    clip-path: inset(50%);
+}
+
+@media (max-width: 1100px) {
+    .admin-user-counters {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .admin-user-table th:nth-child(3),
+    .admin-user-table td:nth-child(3) {
+        display: none;
+    }
+}
+
+@media (max-width: 760px) {
+    .admin-user-counters {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .admin-user-toolbar {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-user-toolbar button {
+        display: none;
+    }
+
+    .admin-user-table-wrap {
+        overflow: visible;
+        border: 0;
+        background: transparent;
+    }
+
+    .admin-user-table,
+    .admin-user-table tbody,
+    .admin-user-table tr,
+    .admin-user-table td {
+        display: block;
+        width: 100%;
+    }
+
+    .admin-user-table thead {
+        display: none;
+    }
+
+    .admin-user-table tr {
+        display: grid;
+        gap: 11px;
+        margin-bottom: 12px;
+        border: 1px solid var(--border-light);
+        border-radius: 14px;
+        padding: 15px;
+        background: var(--bg-card);
+    }
+
+    .admin-user-table td,
+    .admin-user-table tbody tr:last-child td {
+        display: grid;
+        grid-template-columns: 112px minmax(0, 1fr);
+        align-items: center;
+        gap: 9px;
+        border: 0;
+        padding: 0;
+    }
+
+    .admin-user-table td::before {
+        content: attr(data-label);
+        color: var(--color-muted);
+        font-size: 12px;
+    }
+
+    .admin-user-table td:first-child {
+        display: block;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--border-light);
+    }
+
+    .admin-user-table td:first-child::before,
+    .admin-user-table td.admin-user-row-action::before {
+        display: none;
+    }
+
+    .admin-user-table td:nth-child(3) {
+        display: grid;
+    }
+
+    .admin-user-row-action {
+        display: block !important;
+        text-align: stretch !important;
+    }
+
+    .admin-user-row-action button {
+        width: 100%;
+    }
+
+    .admin-user-drawer {
+        width: 100%;
+        padding: 18px 15px;
+    }
+
+    .admin-user-details-list {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-user-details-list > div.wide {
+        grid-column: auto;
+    }
+
+    .admin-user-action-dialog {
+        padding: 20px 16px;
+    }
+
+    .admin-user-action-buttons {
+        flex-direction: column-reverse;
+    }
+
+    .admin-user-action-buttons button {
+        width: 100%;
+    }
+}

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { advertisementDialogMeta } from "../advertisementDialogMeta";
 
 function isGroupId(id) {
     return typeof id === "string" && id.startsWith("group-");
@@ -32,7 +33,9 @@ export default function DialogList({
     currentUserId,
     users,
     chats,
+    advertisementSummaries = {},
     activeUserId,
+    blockedIds = new Set(),
     onSelect,
     className = "",
 }) {
@@ -49,10 +52,13 @@ export default function DialogList({
         const items = users
             .map((user) => {
                 const group = isGroupId(user.id);
+                if (!group && blockedIds.has(user.id)) return null;
                 const chatId = group ? user.id : getPrivateChatId(currentUserId, user.id);
                 const chat = chats[chatId];
                 const messages = chat?.messages ?? [];
                 const lastMessage = messages[messages.length - 1] ?? null;
+                const advertisementSummary = group ? advertisementSummaries[user.id] : null;
+                const advertisementMeta = advertisementDialogMeta(advertisementSummary);
 
                 // Требование: группы показываем всегда.
                 // Контакты показываем только если в чате есть хотя бы одно сообщение.
@@ -69,12 +75,16 @@ export default function DialogList({
                     isOnline: Boolean(user.isOnline),
                     isGroup: group,
                     groupOrder: group ? getGroupNumber(user.id) : null,
-                    lastText: getPreviewText(lastMessage),
-                    lastMessageAt: lastMessage?.createdAt ?? 0,
-                    lastTime: formatTime(lastMessage?.createdAt),
-                    unread: messages.filter(
+                    lastText: advertisementMeta
+                        ? advertisementMeta.preview
+                        : getPreviewText(lastMessage),
+                    lastMessageAt: advertisementMeta?.timestamp ?? lastMessage?.createdAt ?? 0,
+                    lastTime: formatTime(advertisementMeta?.timestamp ?? lastMessage?.createdAt),
+                    unread: advertisementMeta
+                        ? advertisementMeta.unread
+                        : (chat?.unreadCount ?? messages.filter(
                         (message) => message.senderId !== currentUserId && message.status !== "read"
-                    ).length,
+                    ).length),
                 };
             })
             .filter(Boolean);
@@ -95,7 +105,7 @@ export default function DialogList({
 
             return a.name.localeCompare(b.name, "ru");
         });
-    }, [chats, currentUserId, query, users]);
+    }, [advertisementSummaries, blockedIds, chats, currentUserId, query, users]);
 
     return (
         <aside className={`dialog-list ${className}`.trim()}>
@@ -112,32 +122,34 @@ export default function DialogList({
                 <button type="button" onClick={applySearch}>Поиск</button>
             </div>
 
-            {dialogItems.map(({ key, selectId, name, isOnline, unread, lastText, lastTime }) => (
-                <div
-                    key={key}
-                    className={`dialog-card ${selectId === activeUserId ? "active" : ""}`}
-                    onClick={() => onSelect(selectId)}
-                >
-                    <div className="dialog-card-top">
-                        <div className="dialog-user">
-                            <span
-                                className={`user-status ${isOnline ? "online" : "offline"}`}
-                            />
-                            <span className="dialog-name">{name}</span>
+            <div className="dialog-items-scroll">
+                {dialogItems.map(({ key, selectId, name, isOnline, unread, lastText, lastTime }) => (
+                    <div
+                        key={key}
+                        className={`dialog-card ${selectId === activeUserId ? "active" : ""}`}
+                        onClick={() => onSelect(selectId)}
+                    >
+                        <div className="dialog-card-top">
+                            <div className="dialog-user">
+                                <span
+                                    className={`user-status ${isOnline ? "online" : "offline"}`}
+                                />
+                                <span className="dialog-name">{name}</span>
+                            </div>
+                            <span className="dialog-time">{lastTime}</span>
                         </div>
-                        <span className="dialog-time">{lastTime}</span>
-                    </div>
 
-                    <div className="dialog-card-bottom">
-                        <span className="dialog-preview">{lastText || "Нет сообщений"}</span>
-                        {unread > 0 ? <span className="dialog-unread">{unread}</span> : null}
+                        <div className="dialog-card-bottom">
+                            <span className="dialog-preview">{lastText || "Нет сообщений"}</span>
+                            {unread > 0 ? <span className="dialog-unread">{unread}</span> : null}
+                        </div>
                     </div>
-                </div>
-            ))}
+                ))}
 
-            {dialogItems.length === 0 ? (
-                <div className="dialog-empty">Ничего не найдено</div>
-            ) : null}
+                {dialogItems.length === 0 ? (
+                    <div className="dialog-empty">Ничего не найдено</div>
+                ) : null}
+            </div>
         </aside>
     );
 }

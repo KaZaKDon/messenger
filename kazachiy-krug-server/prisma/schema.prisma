@@ -18,12 +18,37 @@ enum GroupMode {
   chat
 }
 
+enum GroupVisibility {
+  public
+  private
+}
+
+enum GroupPublishPolicy {
+  members
+  selected_authors
+  admin_moderator
+  owner
+  admin
+}
+
+enum GroupStatus {
+  active
+  disabled
+  archived
+}
+
+enum GroupContentType {
+  chat
+  notice
+  advertisement
+}
+
 enum MessageStatus {
   sent
   delivered
   read
 }
- 
+
 enum MessageType {
   text
   media
@@ -56,33 +81,177 @@ enum AccountStatus {
   active
   rejected
   blocked
+  deleted
 }
 
 enum UserRole {
   user
+  moderator
   admin
 }
 
-model User {
-  id         String        @id
-  login      String?       @unique
-  passwordHash String?
-  status       AccountStatus @default(pending)
-  role         UserRole      @default(user)
-  approvalCode String?       @unique
-  name       String
-  phone      String        @unique
-  avatar     String?
-  createdAt  DateTime      @default(now())
+enum RegistrationPurpose {
+  community
+  information
+  find_offers
+  publish_announcements
+  represent_organization
+  other
+}
 
-  memberships ChatMember[]
-  messages    Message[]
-  initiatedCalls CallSession[]
-  settings    UserSettings?
-  sessions    Session[]
-  recoveryRequests PasswordRecoveryRequest[]
+enum LegalAcceptanceType {
+  terms_rules
+  personal_data
+  public_profile
+}
+
+enum AdvertisementStatus {
+  active
+  needs_edit
+  removed
+  expired
+  deleted
+}
+
+enum ComplaintTargetType {
+  advertisement
+  message
+  user
+  group
+}
+
+enum ComplaintStatus {
+  new
+  in_review
+  resolved
+  rejected
+}
+
+enum SupportRequestStatus {
+  new
+  in_progress
+  answered
+  closed
+}
+
+enum PaymentRecordStatus {
+  recorded
+  voided
+}
+
+model User {
+  id             String        @id
+  login          String?       @unique
+  email          String?       @unique
+  passwordHash   String?
+  status         AccountStatus @default(pending)
+  role           UserRole      @default(user)
+  approvalCode   String?       @unique
+  name           String
+  phone          String        @unique
+  avatar         String?
+  createdAt      DateTime      @default(now())
+  blockedAt      DateTime?
+  blockReason    String?
+  deletedAt      DateTime?
+  deletionReason String?
+
+  memberships                      ChatMember[]
+  messages                         Message[]
+  initiatedCalls                   CallSession[]
+  settings                         UserSettings?
+  profile                          UserProfile?
+  sessions                         Session[]
+  recoveryRequests                 PasswordRecoveryRequest[]
+  ownedGroupRules                  GroupRule[]               @relation("GroupOwner")
+  groupPublisherAssignments        GroupPublisher[]
+  registrationApplication          RegistrationApplication?  @relation("RegistrationApplicant")
+  reviewedRegistrationApplications RegistrationApplication[] @relation("RegistrationReviewer")
+  legalAcceptances                 LegalAcceptance[]
+  authoredAdvertisements           Advertisement[]           @relation("AdvertisementAuthor")
+  moderatedAdvertisements          Advertisement[]           @relation("AdvertisementModerator")
+  reportedComplaints               Complaint[]               @relation("ComplaintReporter")
+  assignedComplaints               Complaint[]               @relation("ComplaintAssignee")
+  supportRequests                  SupportRequest[]          @relation("SupportRequestAuthor")
+  assignedSupportRequests          SupportRequest[]          @relation("SupportRequestAssignee")
+  supportRequestMessages           SupportRequestMessage[]   @relation("SupportRequestMessageAuthor")
+  groupPaymentsAsOwner             GroupPayment[]            @relation("GroupPaymentOwner")
+  recordedGroupPayments            GroupPayment[]            @relation("GroupPaymentRecorder")
+  voidedGroupPayments              GroupPayment[]            @relation("GroupPaymentVoider")
+  advertisementGroupReads          AdvertisementGroupRead[]
+  blockedUsers                     UserBlock[]               @relation("UserBlocker")
+  blockedByUsers                   UserBlock[]               @relation("UserBlocked")
 
   @@map("users")
+}
+
+model UserProfile {
+  userId     String   @id
+  settlement String?
+  occupation String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model UserBlock {
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("UserBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("UserBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+  @@map("user_blocks")
+}
+
+model RegistrationApplication {
+  id           String                @id @default(cuid())
+  userId       String                @unique
+  firstName    String
+  lastName     String
+  settlement   String
+  occupation   String
+  purposes     RegistrationPurpose[]
+  purposeNote  String?
+  approvalCode String?               @unique
+  expiresAt    DateTime
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewReason String?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  user       User  @relation("RegistrationApplicant", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("RegistrationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([expiresAt])
+  @@index([reviewedAt])
+  @@index([lastName, firstName])
+  @@map("registration_applications")
+}
+
+model LegalAcceptance {
+  id              String              @id @default(cuid())
+  userId          String
+  type            LegalAcceptanceType
+  documentVersion String
+  source          String              @default("registration")
+  ipAddress       String?
+  userAgent       String?
+  acceptedAt      DateTime            @default(now())
+  revokedAt       DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type, acceptedAt])
+  @@index([type, acceptedAt])
+  @@map("legal_acceptances")
 }
 
 model AuditLog {
@@ -99,27 +268,35 @@ model AuditLog {
 }
 
 model PasswordRecoveryRequest {
-  id          String   @id @default(cuid())
-  userId      String
-  requestCode String   @unique
-  resolvedAt  DateTime?
-  expiresAt   DateTime
-  createdAt   DateTime @default(now())
+  id               String    @id @default(cuid())
+  userId           String
+  requestCode      String
+  clientSecretHash String?
+  status           String    @default("pending")
+  reviewedById     String?
+  reviewedAt       DateTime?
+  reviewReason     String?
+  resolvedAt       DateTime?
+  completedAt      DateTime?
+  expiresAt        DateTime
+  createdAt        DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([requestCode, status])
   @@index([expiresAt])
   @@map("password_recovery_requests")
 }
 
 model Session {
-  id         String    @id @default(cuid())
+  id         String   @id @default(cuid())
   userId     String
-  tokenHash  String    @unique
+  tokenHash  String   @unique
   expiresAt  DateTime
-  lastUsedAt DateTime  @default(now())
-  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -129,24 +306,26 @@ model Session {
 }
 
 model Chat {
-  id         String      @id
-  type       ChatType
-  title      String?
-  createdAt  DateTime    @default(now())
+  id        String   @id
+  type      ChatType
+  title     String?
+  createdAt DateTime @default(now())
 
-  members    ChatMember[]
-  messages   Message[]
-  callSessions CallSession[]
-  groupRule  GroupRule?
+  members            ChatMember[]
+  messages           Message[]
+  callSessions       CallSession[]
+  groupRule          GroupRule?
+  advertisementReads AdvertisementGroupRead[]
 
   @@map("chats")
 }
 
 model ChatMember {
-  chatId    String
-  userId    String
-  role      String      @default("member")
-  joinedAt  DateTime    @default(now())
+  chatId   String
+  userId   String
+  role     String   @default("member")
+  joinedAt DateTime @default(now())
+  clearedAt DateTime?
 
   chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -157,18 +336,18 @@ model ChatMember {
 }
 
 model Message {
-  id          String             @id @default(cuid())
-  chatId      String
-  senderId    String
-  text        String
-  type        MessageType        @default(text)
-  imageUrl    String?
-  imageUrls   Json?
-  status      MessageStatus      @default(sent)
-  createdAt   DateTime           @default(now())
+  id        String        @id @default(cuid())
+  chatId    String
+  senderId  String
+  text      String
+  type      MessageType   @default(text)
+  imageUrl  String?
+  imageUrls Json?
+  status    MessageStatus @default(sent)
+  createdAt DateTime      @default(now())
 
-  chat        Chat               @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  sender      User               @relation(fields: [senderId], references: [id], onDelete: Restrict)
+  chat   Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender User @relation(fields: [senderId], references: [id], onDelete: Restrict)
 
   attachments MessageAttachment[]
   calls       CallSession[]
@@ -177,19 +356,19 @@ model Message {
   @@index([senderId])
   @@map("messages")
 }
- 
+
 model MessageAttachment {
-  id          String    @id @default(cuid())
-  messageId   String
-  mediaType   MediaType
-  url         String
-  mimeType    String?
-  sizeBytes   Int?
-  durationMs  Int?
-  waveform    Json?
-  width       Int?
-  height      Int?
-  createdAt   DateTime  @default(now())
+  id         String    @id @default(cuid())
+  messageId  String
+  mediaType  MediaType
+  url        String
+  mimeType   String?
+  sizeBytes  Int?
+  durationMs Int?
+  waveform   Json?
+  width      Int?
+  height     Int?
+  createdAt  DateTime  @default(now())
 
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
@@ -199,18 +378,18 @@ model MessageAttachment {
 }
 
 model CallSession {
-  id           String      @id @default(cuid())
-  chatId       String
-  initiatorId  String
-  type         CallType
-  status       CallStatus  @default(initiated)
-  startedAt    DateTime?
-  endedAt      DateTime?
-  durationSec  Int?
-  endedReason  String?
-  messageId    String?     @unique
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id          String     @id @default(cuid())
+  chatId      String
+  initiatorId String
+  type        CallType
+  status      CallStatus @default(initiated)
+  startedAt   DateTime?
+  endedAt     DateTime?
+  durationSec Int?
+  endedReason String?
+  messageId   String?    @unique
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
   initiator User     @relation(fields: [initiatorId], references: [id], onDelete: Restrict)
@@ -222,9 +401,9 @@ model CallSession {
 }
 
 model UserSettings {
-  userId               String   @id
-  theme                String   @default("light")
-  notificationsEnabled Boolean  @default(true)
+  userId               String  @id
+  theme                String  @default("light")
+  notificationsEnabled Boolean @default(true)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -232,13 +411,202 @@ model UserSettings {
 }
 
 model GroupRule {
-  chatId                        String    @id
-  mode                          GroupMode @default(chat)
-  requiresAnnouncementWithImage Boolean   @default(false)
-  publishUserIds                Json?     @map("publish_user_ids")
+  chatId                        String             @id
+  mode                          GroupMode          @default(chat)
+  contentType                   GroupContentType   @default(chat)
+  visibility                    GroupVisibility    @default(public)
+  publishPolicy                 GroupPublishPolicy @default(members)
+  status                        GroupStatus        @default(active)
+  requiresAnnouncementWithImage Boolean            @default(false)
+  advertisementLifetimeDays     Int?
+  publishUserIds                Json?              @map("publish_user_ids")
+  ownerId                       String?
+  ownershipStartsAt             DateTime?
+  ownershipEndsAt               DateTime?
 
+  chat           Chat             @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  owner          User?            @relation("GroupOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  publishers     GroupPublisher[]
+  advertisements Advertisement[]
+  payments       GroupPayment[]
+
+  @@index([ownerId])
+  @@index([status])
+  @@index([ownershipEndsAt])
+  @@map("group_rules")
+}
+
+model GroupPublisher {
+  chatId     String
+  userId     String
+  assignedAt DateTime @default(now())
+
+  groupRule GroupRule @relation(fields: [chatId], references: [chatId], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([chatId, userId])
+  @@index([userId])
+  @@map("group_publishers")
+}
+
+model Advertisement {
+  id               String              @id @default(cuid())
+  chatId           String
+  authorId         String
+  title            String
+  settlement       String
+  price            String?
+  description      String
+  status           AdvertisementStatus @default(active)
+  publishedAt      DateTime            @default(now())
+  expiresAt        DateTime?
+  moderatedById    String?
+  moderatedAt      DateTime?
+  moderationReason String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  groupRule   GroupRule            @relation(fields: [chatId], references: [chatId], onDelete: Restrict)
+  author      User                 @relation("AdvertisementAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  moderatedBy User?                @relation("AdvertisementModerator", fields: [moderatedById], references: [id], onDelete: SetNull)
+  images      AdvertisementImage[]
+
+  @@index([chatId, status, publishedAt])
+  @@index([authorId, status, expiresAt])
+  @@index([status, expiresAt])
+  @@map("advertisements")
+}
+
+model AdvertisementImage {
+  id              String   @id @default(cuid())
+  advertisementId String
+  url             String
+  sortOrder       Int      @default(0)
+  width           Int?
+  height          Int?
+  createdAt       DateTime @default(now())
+
+  advertisement Advertisement @relation(fields: [advertisementId], references: [id], onDelete: Cascade)
+
+  @@unique([advertisementId, sortOrder])
+  @@index([advertisementId])
+  @@map("advertisement_images")
+}
+
+model AdvertisementGroupRead {
+  userId     String
+  chatId     String
+  lastReadAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
 
-  @@map("group_rules")
+  @@id([userId, chatId])
+  @@index([chatId, lastReadAt])
+  @@map("advertisement_group_reads")
+}
 
+model Settlement {
+  id             String   @id @default(cuid())
+  name           String
+  normalizedName String   @unique
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([isActive, name])
+  @@map("settlements")
+}
+
+model Complaint {
+  id             String              @id @default(cuid())
+  reporterId     String
+  targetType     ComplaintTargetType
+  targetId       String
+  targetSnapshot Json?
+  reason         String
+  details        String?
+  status         ComplaintStatus     @default(new)
+  assignedToId   String?
+  resolution     String?
+  resolvedAt     DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  reporter   User  @relation("ComplaintReporter", fields: [reporterId], references: [id], onDelete: Restrict)
+  assignedTo User? @relation("ComplaintAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([reporterId, createdAt])
+  @@index([targetType, targetId])
+  @@index([assignedToId, status])
+  @@map("complaints")
+}
+
+model SupportRequest {
+  id                 String               @id @default(cuid())
+  authorId           String
+  subject            String
+  category           String               @default("other")
+  status             SupportRequestStatus @default(new)
+  assignedToId       String?
+  authorLastReadAt   DateTime?
+  lastStaffMessageAt DateTime?
+  closedAt           DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  author     User                    @relation("SupportRequestAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  assignedTo User?                   @relation("SupportRequestAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  messages   SupportRequestMessage[]
+
+  @@index([status, createdAt])
+  @@index([authorId, createdAt])
+  @@index([authorId, lastStaffMessageAt])
+  @@index([assignedToId, status])
+  @@map("support_requests")
+}
+
+model SupportRequestMessage {
+  id        String   @id @default(cuid())
+  requestId String
+  authorId  String
+  text      String
+  createdAt DateTime @default(now())
+
+  request SupportRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  author  User           @relation("SupportRequestMessageAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([requestId, createdAt])
+  @@index([authorId, createdAt])
+  @@map("support_request_messages")
+}
+
+model GroupPayment {
+  id             String              @id @default(cuid())
+  chatId         String
+  ownerId        String?
+  amount         Decimal             @db.Decimal(12, 2)
+  currency       String              @default("RUB")
+  paidAt         DateTime
+  periodStartsAt DateTime
+  periodEndsAt   DateTime
+  comment        String?
+  status         PaymentRecordStatus @default(recorded)
+  recordedById   String
+  voidedAt       DateTime?
+  voidedById     String?
+  voidReason     String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  groupRule  GroupRule @relation(fields: [chatId], references: [chatId], onDelete: Restrict)
+  owner      User?     @relation("GroupPaymentOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  recordedBy User      @relation("GroupPaymentRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
+  voidedBy   User?     @relation("GroupPaymentVoider", fields: [voidedById], references: [id], onDelete: SetNull)
+
+  @@index([chatId, paidAt])
+  @@index([ownerId, paidAt])
+  @@index([status, periodEndsAt])
+  @@map("group_payments")
 }

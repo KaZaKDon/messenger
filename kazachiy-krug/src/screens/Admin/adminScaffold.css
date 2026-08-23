@@ -1,0 +1,198 @@
+.admin-scaffold-page {
+    min-height: 100%;
+    padding: clamp(24px, 4vw, 52px);
+    color: var(--color-primary);
+}
+
+.admin-scaffold-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 22px;
+    margin-bottom: 26px;
+}
+
+.admin-scaffold-header h1 {
+    margin: 0;
+    font-size: clamp(28px, 3vw, 42px);
+    line-height: 1.1;
+}
+
+.admin-scaffold-header p {
+    max-width: 700px;
+    margin: 9px 0 0;
+    color: var(--color-muted);
+    line-height: 1.5;
+}
+
+.admin-scaffold-eyebrow {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--color-accent);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.13em;
+}
+
+.admin-scaffold-header button {
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    padding: 10px 16px;
+    background: var(--bg-card);
+    color: var(--color-primary);
+    font: inherit;
+    cursor: pointer;
+}
+
+.admin-scaffold-header button:disabled {
+    cursor: wait;
+    opacity: 0.65;
+}
+
+.admin-scaffold-error {
+    border: 1px solid rgba(180, 35, 24, 0.24);
+    border-radius: 12px;
+    padding: 12px 14px;
+    background: rgba(180, 35, 24, 0.07);
+    color: #b42318;
+}
+
+.admin-dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.admin-dashboard-card {
+    min-height: 172px;
+    display: grid;
+    grid-template-columns: 46px minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+    align-items: center;
+    column-gap: 14px;
+    border: 1px solid var(--border-light);
+    border-radius: 17px;
+    padding: 20px;
+    background: var(--bg-card);
+    color: var(--color-primary);
+    text-decoration: none;
+    transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.admin-dashboard-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(122, 46, 46, 0.35);
+    box-shadow: 0 13px 32px rgba(47, 34, 27, 0.08);
+}
+
+.admin-dashboard-card-icon {
+    width: 46px;
+    height: 46px;
+    grid-row: 1 / span 2;
+    display: grid;
+    place-items: center;
+    border-radius: 13px;
+    background: rgba(122, 46, 46, 0.11);
+    color: var(--color-accent);
+    font-size: 22px;
+}
+
+.admin-dashboard-card-value {
+    justify-self: end;
+    color: var(--color-accent);
+    font-size: 30px;
+    font-weight: 800;
+}
+
+.admin-dashboard-card strong {
+    grid-column: 1 / -1;
+    margin-top: 18px;
+    font-size: 19px;
+}
+
+.admin-dashboard-card small {
+    grid-column: 1 / -1;
+    align-self: end;
+    margin-top: 5px;
+    color: var(--color-muted);
+    line-height: 1.35;
+}
+
+.admin-tabs {
+    display: flex;
+    gap: 8px;
+    margin: -8px 0 24px;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.admin-tabs a {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 3px solid transparent;
+    padding: 13px 16px;
+    color: var(--color-muted);
+    text-decoration: none;
+}
+
+.admin-tabs a.active {
+    border-bottom-color: var(--color-accent);
+    color: var(--color-accent);
+    font-weight: 700;
+}
+
+.admin-tabs strong {
+    min-width: 22px;
+    height: 22px;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    padding: 0 6px;
+    background: var(--color-accent);
+    color: #fff;
+    font-size: 11px;
+}
+
+.admin-users-page > .admin-page {
+    min-height: auto;
+    padding: 0;
+}
+
+@media (max-width: 900px) {
+    .admin-dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 760px) {
+    .admin-scaffold-page {
+        padding: 20px 14px 34px;
+    }
+
+    .admin-scaffold-header {
+        margin-bottom: 20px;
+    }
+
+    .admin-scaffold-header h1 {
+        font-size: 27px;
+    }
+
+    .admin-scaffold-header button {
+        display: none;
+    }
+
+    .admin-dashboard-card {
+        min-height: 148px;
+    }
+
+    .admin-tabs {
+        margin-top: -4px;
+        overflow-x: auto;
+    }
+
+    .admin-tabs a {
+        flex: 0 0 auto;
+        padding-inline: 10px;
+    }
+
+}

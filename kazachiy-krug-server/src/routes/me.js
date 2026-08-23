@@ -2,36 +2,16 @@ import express from "express";
 
 import { prisma } from "../db/prisma.js";
 import { usersById } from "../store/users.js";
+import { requireAuth } from "../auth/middleware.js";
+import { avatarUpload, removeLocalAvatar } from "../profile/avatarUpload.js";
+import {
+    getUserProfile,
+    profilePayload,
+    updateUserProfile,
+} from "../profile/userProfileService.js";
 
 const router = express.Router();
-
-const profileExtrasByUserId = new Map();
-
-function getDefaultExtras() {
-    return {
-        region: "Ростов-на-Дону",
-        occupation: "Торговец",
-    };
-}
-
-function sanitizeString(value) {
-    if (typeof value !== "string") return null;
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : null;
-}
-
-function toMePayload(user) {
-    const extras = profileExtrasByUserId.get(user.id) ?? getDefaultExtras();
-
-    return {
-        id: user.id,
-        name: user.name,
-        phone: user.phone,
-        avatar: user.avatar ?? null,
-        region: extras.region,
-        occupation: extras.occupation,
-    };
-}
+router.use(requireAuth);
 
 async function findUserById(userId) {
     try {
@@ -45,11 +25,7 @@ async function findUserById(userId) {
 }
 
 router.get("/me", async (req, res) => {
-    const userId = sanitizeString(req.query.userId);
-
-    if (!userId) {
-        return res.status(400).json({ error: "userId is required" });
-    }
+    const userId = req.auth.user.id;
 
     const user = await findUserById(userId);
 
@@ -57,15 +33,11 @@ router.get("/me", async (req, res) => {
         return res.status(404).json({ error: "User not found" });
     }
 
-    return res.json(toMePayload(user));
+    return res.json(await getUserProfile({ prisma, user }));
 });
 
-router.patch("/me", async (req, res) => {
-    const userId = sanitizeString(req.body.userId);
-
-    if (!userId) {
-        return res.status(400).json({ error: "userId is required" });
-    }
+router.patch("/me", async (req, res, next) => {
+    const userId = req.auth.user.id;
 
     const user = await findUserById(userId);
 
@@ -73,42 +45,53 @@ router.patch("/me", async (req, res) => {
         return res.status(404).json({ error: "User not found" });
     }
 
-    const nextPhone = sanitizeString(req.body.phone);
-    const nextRegion = sanitizeString(req.body.region);
-    const nextOccupation = sanitizeString(req.body.occupation);
-
-    if (!nextPhone && !nextRegion && !nextOccupation) {
-        return res.status(400).json({ error: "At least one field must be provided" });
+    try {
+        return res.json(await updateUserProfile({ prisma, user, source: req.body }));
+    } catch (error) {
+        return next(error);
     }
+});
 
-    const nextExtras = {
-        ...(profileExtrasByUserId.get(userId) ?? getDefaultExtras()),
-    };
-
-    if (nextRegion) nextExtras.region = nextRegion;
-    if (nextOccupation) nextExtras.occupation = nextOccupation;
-    profileExtrasByUserId.set(userId, nextExtras);
-
-    let nextUser = user;
-
-    if (nextPhone && nextPhone !== user.phone) {
-        try {
-            nextUser = await prisma.user.update({
-                where: { id: userId },
-                data: { phone: nextPhone },
-            });
-        } catch {
-            if (usersById[userId]) {
-                usersById[userId] = {
-                    ...usersById[userId],
-                    phone: nextPhone,
-                };
-                nextUser = usersById[userId];
-            }
+router.post("/me/avatar", (req, res, next) => {
+    avatarUpload.single("avatar")(req, res, async (error) => {
+        if (error) {
+            const message = error.code === "LIMIT_FILE_SIZE"
+                ? "Размер аватара не должен превышать 5 МБ"
+                : error.message;
+            return res.status(400).json({ error: message });
         }
-    }
+        if (!req.file) return res.status(400).json({ error: "Выберите изображение" });
 
-    return res.json(toMePayload(nextUser));
+        try {
+            const avatar = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+            const previousAvatar = req.auth.user.avatar;
+            const user = await prisma.user.update({
+                where: { id: req.auth.user.id },
+                data: { avatar },
+            });
+            removeLocalAvatar(previousAvatar);
+            const profile = await prisma.userProfile.findUnique({ where: { userId: user.id } });
+            return res.json({ user: profilePayload(user, profile) });
+        } catch (updateError) {
+            removeLocalAvatar(`${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`);
+            return next(updateError);
+        }
+    });
+});
+
+router.delete("/me/avatar", async (req, res, next) => {
+    try {
+        const previousAvatar = req.auth.user.avatar;
+        const user = await prisma.user.update({
+            where: { id: req.auth.user.id },
+            data: { avatar: null },
+        });
+        removeLocalAvatar(previousAvatar);
+        const profile = await prisma.userProfile.findUnique({ where: { userId: user.id } });
+        return res.json({ user: profilePayload(user, profile) });
+    } catch (error) {
+        return next(error);
+    }
 });
 
 export default router;

@@ -33,11 +33,9 @@
 }
 
 .app-brand-logo {
-    width: 72px;
-    height: 72px;
-    object-fit: cover;
-    border-radius: 50%;
-    border: 1px solid var(--border-light);
+    width: 92px;
+    height: 92px;
+    object-fit: contain;
 }
 
 .app-brand-title {
@@ -98,6 +96,20 @@
     padding: 8px 12px;
     border-radius: 12px;
     cursor: pointer;
+}
+
+.app-sidebar-badge {
+    min-width: 22px;
+    height: 22px;
+    display: inline-grid;
+    place-items: center;
+    margin-left: auto;
+    border-radius: 999px;
+    padding: 0 6px;
+    background: var(--color-accent);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
 }
 
 .app-sidebar-link > span:first-child {
@@ -200,15 +212,91 @@
 }
 
 .app-sidebar-contact-row {
+    width: 100%;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    text-align: left;
+    padding: 10px;
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    background: var(--bg-card);
+    color: var(--color-primary);
 }
 
 .app-sidebar-contact-subtitle {
+    display: block;
     color: var(--color-muted);
     font-size: 12px;
+    margin-top: 3px;
+}
+
+.app-sidebar-contact-row-avatar,
+.app-sidebar-contact-avatar {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    overflow: hidden;
+    border-radius: 50%;
+    background: var(--color-accent);
+    color: white;
+    font-weight: 800;
+}
+
+.app-sidebar-contact-row-avatar {
+    width: 40px;
+    height: 40px;
+}
+
+.app-sidebar-contact-row-avatar img,
+.app-sidebar-contact-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.app-sidebar-contact-card {
+    display: grid;
+    justify-items: center;
+    gap: 12px;
+    text-align: center;
+}
+
+.app-sidebar-contact-avatar {
+    width: 96px;
+    height: 96px;
+    font-size: 34px;
+}
+
+.app-sidebar-contact-card h3 {
+    margin: 0;
+}
+
+.app-sidebar-contact-phone {
+    color: var(--color-accent);
+    font-weight: 700;
+}
+
+.app-sidebar-contact-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.app-sidebar-contact-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
+.app-sidebar-contact-tabs button.active { background: var(--color-accent); color: white; }
+.app-sidebar-contact-actions .app-sidebar-contact-block { grid-column: 1 / -1; color: #b42318; }
+.app-sidebar-contact-actions .app-sidebar-contact-unblock { grid-column: 1 / -1; }
+
+.app-sidebar-contact-actions button {
+    min-height: 64px;
+    padding: 8px 5px;
+}
+
+.app-sidebar-contact-back {
+    justify-self: start !important;
 }
 
 .app-sidebar-contacts-search {
@@ -218,6 +306,16 @@
     padding: 8px 10px;
     background: var(--bg-card);
     color: var(--color-primary);
+}
+
+@media (max-width: 520px) {
+    .app-sidebar-contact-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .app-sidebar-contact-actions button {
+        min-height: 46px;
+    }
 }
 
 @media (max-width: 1199px) {
@@ -266,5 +364,3 @@
         transform: translateX(20px);
     }
 }
-
-

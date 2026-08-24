@@ -21,6 +21,14 @@ test("dialog cards have their own scroll area below fixed search", () => {
     assert.match(chatCss, /\.dialog-search[\s\S]*?flex:\s*0 0 auto/);
 });
 
+test("announcement form scrolls inside the chat and keeps submit visible", () => {
+    assert.match(chatCss, /\.announce-screen[\s\S]*?flex:\s*1/);
+    assert.match(chatCss, /\.announce-screen[\s\S]*?min-height:\s*0/);
+    assert.match(chatCss, /\.announce-screen[\s\S]*?overflow-y:\s*auto/);
+    assert.match(chatCss, /\.announce-send[\s\S]*?position:\s*sticky/);
+    assert.match(chatCss, /\.announce-send[\s\S]*?bottom:\s*0/);
+});
+
 test("chat opens at the latest publication while older content stays above", () => {
     assert.match(chatWindowSource, /messagesViewportRef/);
     assert.match(chatWindowSource, /scrollToLatest\("auto"\)/);

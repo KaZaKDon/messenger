@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-import { ADMIN_PHONE, ADMIN_PHONE_DISPLAY } from "../../shared/config";
+import { ADMIN_PHONE, ADMIN_PHONE_DISPLAY, BACKEND_ENABLED } from "../../shared/config";
 import { connectSocket } from "../../shared/socket";
 import { authApi, AuthRequestError } from "./authApi";
 import AuthBrand from "./components/AuthBrand";
@@ -151,6 +151,13 @@ export default function Phone({ setCurrentUser, isNightMode, setIsNightMode }) {
             <ThemeToggle isNightMode={isNightMode} onChange={setIsNightMode} />
             <section className={`auth-panel ${mode === "register" ? "auth-panel-wide" : ""}`}>
                 <AuthBrand isNightMode={isNightMode} />
+
+                {!BACKEND_ENABLED ? (
+                    <p className="auth-launch-notice" role="status">
+                        Мессенджер готовится к запуску. Публичная страница уже доступна,
+                        а вход и регистрация заработают после подключения сервера.
+                    </p>
+                ) : null}
 
                 {!isPendingScreen ? <AuthTabs mode={mode} onChange={selectMode} /> : null}
 

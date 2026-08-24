@@ -1,5 +1,5 @@
 import { io } from "socket.io-client";
-import { SOCKET_URL } from "./config";
+import { BACKEND_ENABLED, SOCKET_URL } from "./config";
 
 let socket = null;
 
@@ -10,13 +10,14 @@ export function connectSocket() {
             autoConnect: false,
         });
 
-        socket.on("connect_error", (error) => {
-            console.error("Socket connect_error:", error?.message ?? error);
-
-        });
+        if (BACKEND_ENABLED) {
+            socket.on("connect_error", (error) => {
+                console.error("Socket connect_error:", error?.message ?? error);
+            });
+        }
     }
 
-    if (!socket.connected) {
+    if (BACKEND_ENABLED && !socket.connected) {
         socket.connect();
     }
 

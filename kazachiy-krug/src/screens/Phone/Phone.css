@@ -73,6 +73,18 @@
     width: min(100%, 780px);
 }
 
+.auth-launch-notice {
+    margin: 0 28px 18px;
+    border: 1px solid rgba(181, 123, 0, 0.3);
+    border-radius: 12px;
+    padding: 11px 14px;
+    background: rgba(181, 123, 0, 0.1);
+    color: var(--color-primary);
+    font-size: 13px;
+    line-height: 1.45;
+    text-align: center;
+}
+
 .auth-brand {
     display: flex;
     flex-direction: column;

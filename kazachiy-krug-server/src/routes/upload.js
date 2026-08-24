@@ -3,8 +3,8 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { env } from "../config/env.js";
-
-const router = Router();
+import { requireAuth } from "../auth/middleware.js";
+import { createUploadRateLimiter } from "../uploads/uploadRateLimit.js";
 
 const UPLOAD_DIR = path.resolve(process.cwd(), env.uploadDir);
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -88,49 +88,59 @@ const upload = multer({
     },
 });
 
-router.post(
-    "/upload",
-    upload.fields([
-        { name: "file", maxCount: 1 },
-        { name: "image", maxCount: 1 },
-    ]),
-    (req, res) => {
-        const { file, error } = pickUploadedFile(req.files);
-        if (error) return res.status(400).json({ message: error });
-        if (!file) return res.status(400).json({ message: "No file uploaded" });
-        if (!isVideoMime(file.mimetype) && file.size > STANDARD_FILE_LIMIT) {
-            fs.unlink(file.path, () => {});
-            return res.status(400).json({ message: "File is too large" });
+export function createUploadRouter({
+    authenticate = requireAuth,
+    limitUploads = createUploadRateLimiter(),
+} = {}) {
+    const router = Router();
+
+    router.post(
+        "/upload",
+        authenticate,
+        limitUploads,
+        upload.fields([
+            { name: "file", maxCount: 1 },
+            { name: "image", maxCount: 1 },
+        ]),
+        (req, res) => {
+            const { file, error } = pickUploadedFile(req.files);
+            if (error) return res.status(400).json({ message: error });
+            if (!file) return res.status(400).json({ message: "No file uploaded" });
+            if (!isVideoMime(file.mimetype) && file.size > STANDARD_FILE_LIMIT) {
+                fs.unlink(file.path, () => {});
+                return res.status(400).json({ message: "File is too large" });
+            }
+
+            const baseUrl = `${req.protocol}://${req.get("host")}`;
+            const fileUrl = `${baseUrl}/uploads/${file.filename}`;
+            const mediaType = isVideoMime(file.mimetype)
+                ? "video"
+                : (isAudioMime(file.mimetype) ? "audio" : "image");
+
+            res.json({
+                ok: true,
+                fileUrl,
+                imageUrl: mediaType === "image" ? fileUrl : null,
+                audioUrl: mediaType === "audio" ? fileUrl : null,
+                videoUrl: mediaType === "video" ? fileUrl : null,
+                mediaType,
+                filename: file.filename,
+                size: file.size,
+                mimetype: file.mimetype,
+            });
         }
+    );
 
-        const baseUrl = `${req.protocol}://${req.get("host")}`;
-        const fileUrl = `${baseUrl}/uploads/${file.filename}`;
-        const mediaType = isVideoMime(file.mimetype)
-            ? "video"
-            : (isAudioMime(file.mimetype) ? "audio" : "image");
+    router.use((err, _req, res, next) => {
+        if (!err) return next();
 
-        res.json({
-            ok: true,
-            fileUrl,
-            imageUrl: mediaType === "image" ? fileUrl : null,
-            audioUrl: mediaType === "audio" ? fileUrl : null,
-            videoUrl: mediaType === "video" ? fileUrl : null,
-            mediaType,
-            filename: file.filename,
-            size: file.size,
-            mimetype: file.mimetype,
-        });
-    }
-);
+        const normalized = toUploadErrorResponse(err);
+        if (!normalized) return next();
 
-router.use((err, _req, res, next) => {
-    if (!err) return next();
+        return res.status(normalized.status).json({ message: normalized.message });
+    });
 
-    const normalized = toUploadErrorResponse(err);
-    if (!normalized) return next();
+    return router;
+}
 
-    return res.status(normalized.status).json({ message: normalized.message });
-});
-
-
-export default router;
+export default createUploadRouter();

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 const html = await readFile("dist/index.html", "utf8");
 const robots = await readFile("dist/robots.txt", "utf8");
 const sitemap = await readFile("dist/sitemap.xml", "utf8");
+const htaccess = await readFile("dist/.htaccess", "utf8");
 
 const requiredHtml = [
     '<html lang="ru">',
@@ -13,7 +14,7 @@ const requiredHtml = [
     'class="landing-hero"',
     'href="/phone?mode=register"',
     "https://vkazakdon.ru",
-    'class="landing-footer__savar"',
+    "КАЗАЧИЙ КРУГ V.1",
     'application/ld+json',
 ];
 
@@ -27,6 +28,10 @@ if (!robots.includes("https://kazachiy-krug.best/sitemap.xml")) {
 
 if (!sitemap.includes("<loc>https://kazachiy-krug.best/</loc>")) {
     throw new Error("Главная страница отсутствует в sitemap.xml");
+}
+
+if (!htaccess.includes("RewriteRule ^ index.html [L]")) {
+    throw new Error(".htaccess не содержит fallback для React Router");
 }
 
 console.log("SEO-проверка пройдена");

@@ -8,6 +8,7 @@ export const landingHero = {
 };
 
 export const landingBranding = {
+    productLabel: "КАЗАЧИЙ КРУГ V.1",
     studioLabel: "VKazakDon Studio",
     studioHref: "https://vkazakdon.ru",
 };
@@ -50,7 +51,6 @@ function escapeHtml(value) {
 
 export function renderLandingSeoMarkup({
     eagleLogoUrl = "/favicon-kazachiy-krug.svg",
-    savarLogoUrl = "/logo-light1.png",
 } = {}) {
     const sections = landingSections.map((section) => `
         <article class="landing-feature" id="${escapeHtml(section.id)}">
@@ -75,7 +75,7 @@ export function renderLandingSeoMarkup({
         <section class="landing-features" aria-label="О Казачьем круге">${sections}
         </section>
         <footer class="landing-footer">
-            <img class="landing-footer__savar" src="${escapeHtml(savarLogoUrl)}" width="180" height="97" alt="SAVAR">
+            <p class="landing-footer__text">${escapeHtml(landingBranding.productLabel)}</p>
             <a class="landing-footer__studio" href="${escapeHtml(landingBranding.studioHref)}" target="_blank" rel="noopener noreferrer">${escapeHtml(landingBranding.studioLabel)}</a>
         </footer>
     </main>`;

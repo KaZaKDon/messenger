@@ -15,7 +15,6 @@ function findBuiltAsset(prefix) {
 
 const branding = {
     eagleLogoUrl: findBuiltAsset("kazachiy-krug-eagle-v-detailed"),
-    savarLogoUrl: findBuiltAsset("logo-light1"),
 };
 
 if (!source.includes(root)) {

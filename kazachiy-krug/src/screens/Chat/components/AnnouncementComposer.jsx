@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { API_BASE_URL } from "../../../shared/config";
 import { fetchSettlements } from "../../../shared/advertisementsApi";
+import { authHeaders } from "../../../shared/authHeaders";
+import { readApiError } from "../../../shared/apiError";
 
 const MAX_IMAGES = 7;
 
@@ -8,8 +10,12 @@ async function uploadOne(file) {
     const fd = new FormData();
     fd.append("image", file);
 
-    const res = await fetch(`${API_BASE_URL}/upload`, { method: "POST", body: fd });
-    if (!res.ok) throw new Error(await res.text());
+    const res = await fetch(`${API_BASE_URL}/upload`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: fd,
+    });
+    if (!res.ok) throw new Error(await readApiError(res, "Не удалось загрузить фотографию"));
     const data = await res.json();
     return data.imageUrl;
 }

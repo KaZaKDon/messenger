@@ -24,14 +24,13 @@ test("public landing contains four concise explanatory sections", () => {
 test("SEO prerender includes meaningful content and working links", () => {
     const markup = renderLandingSeoMarkup({
         eagleLogoUrl: "/assets/eagle.png",
-        savarLogoUrl: "/assets/savar.png",
     });
     assert.match(markup, /<h1[^>]*>Казачий круг<\/h1>/);
     assert.match(markup, /href="\/phone"/);
     assert.match(markup, /href="\/phone\?mode=register"/);
     assert.match(markup, /Модерация без чтения личных чатов/);
     assert.match(markup, /src="\/assets\/eagle.png"/);
-    assert.match(markup, /src="\/assets\/savar.png"/);
+    assert.match(markup, /КАЗАЧИЙ КРУГ V\.1/);
     assert.match(markup, /href="https:\/\/vkazakdon.ru"/);
     assert.equal(landingBranding.studioLabel, "VKazakDon Studio");
 });

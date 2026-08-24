@@ -9,6 +9,8 @@ import AnnouncementComposer from "./AnnouncementComposer";
 import AnnouncementCard from "./AnnouncementCard";
 import { connectSocket, getSocket } from "/src/shared/socket";
 import { API_BASE_URL } from "../../../shared/config";
+import { authHeaders } from "../../../shared/authHeaders";
+import { readApiError } from "../../../shared/apiError";
 import { createAdvertisement, fetchAdvertisements } from "../../../shared/advertisementsApi";
 import { acquireCallMedia } from "../../../shared/callMedia";
 import { scheduleLatestViewport } from "../chatViewport";
@@ -713,12 +715,12 @@ export default function ChatWindow({
         try {
             const res = await fetch(`${API_BASE_URL}/upload`, {
                 method: "POST",
+                headers: authHeaders(),
                 body: fd,
             });
 
             if (!res.ok) {
-                const text = await res.text();
-                throw new Error(text || "Upload failed");
+                throw new Error(await readApiError(res, "Не удалось загрузить файл"));
             }
 
             const data = await res.json();
@@ -739,12 +741,12 @@ export default function ChatWindow({
         try {
             const res = await fetch(`${API_BASE_URL}/upload`, {
                 method: "POST",
+                headers: authHeaders(),
                 body: fd,
             });
 
             if (!res.ok) {
-                const text = await res.text();
-                throw new Error(text || "Upload failed");
+                throw new Error(await readApiError(res, "Не удалось загрузить голосовое сообщение"));
             }
 
             const data = await res.json();
@@ -992,7 +994,7 @@ export default function ChatWindow({
             clearSelectedMedia();
         } catch (err) {
             console.error(err);
-            alert("Ошибка при отправке. Проверь сервер /upload.");
+            alert(err?.message || "Не удалось загрузить файл");
         }
     };
 
@@ -1037,7 +1039,7 @@ export default function ChatWindow({
             clearRecordedVoice();
         } catch (err) {
             console.error(err);
-            alert("Ошибка при отправке голосового. Проверь сервер /upload.");
+            alert(err?.message || "Не удалось загрузить голосовое сообщение");
         }
     };
 

@@ -41,7 +41,7 @@ export default function Landing() {
 
             <footer className="landing-footer">
                 <p className="landing-footer__text">
-                    КАЗАЧИЙ КРУГ  V.1
+                    {landingBranding.productLabel}
                 </p>
                 <a
                     className="landing-footer__studio"

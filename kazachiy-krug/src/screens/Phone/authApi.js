@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "../../shared/config";
+import { API_BASE_URL, BACKEND_ENABLED } from "../../shared/config";
 
 export class AuthRequestError extends Error {
     constructor(message, { status = 0, field = null, payload = null } = {}) {
@@ -11,6 +11,10 @@ export class AuthRequestError extends Error {
 }
 
 async function post(path, body) {
+    if (!BACKEND_ENABLED) {
+        throw new AuthRequestError("Мессенджер готовится к запуску. Попробуйте войти немного позже");
+    }
+
     let response;
     try {
         response = await fetch(`${API_BASE_URL}${path}`, {

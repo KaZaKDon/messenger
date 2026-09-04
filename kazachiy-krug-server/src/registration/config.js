@@ -1,6 +1,6 @@
 import { formatRussianMobilePhone, normalizeRussianMobilePhone } from "./phone.js";
 
-const DEFAULT_DOCUMENT_VERSION = "2026-08-15";
+const DEFAULT_DOCUMENT_VERSION = "2026-08-27";
 
 export class RegistrationConfigError extends Error {
     constructor(message) {

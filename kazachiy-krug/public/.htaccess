@@ -1,16 +1,32 @@
 DirectoryIndex index.html
 Options -MultiViews
 
+# Real 404 response for unknown URLs. This prevents SPA fallback from
+# turning arbitrary non-existent pages into HTTP 200 (soft 404).
+ErrorDocument 404 /404.html
+
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # Существующие файлы и каталоги отдаются напрямую.
+    # Existing files and directories are served directly.
     RewriteCond %{REQUEST_FILENAME} -f [OR]
     RewriteCond %{REQUEST_FILENAME} -d
     RewriteRule ^ - [L]
 
-    # Остальные адреса открывает React Router.
-    RewriteRule ^ index.html [L]
+    # Public/authenticated React routes that must survive a direct request
+    # or browser refresh on shared hosting.
+    RewriteRule ^(?:phone|code|chat|settings|my-ads|support-requests|calls|profile)/?$ index.html [L]
+
+    # Current admin routes from src/app/router.jsx.
+    RewriteRule ^admin/?$ index.html [L]
+    RewriteRule ^admin/(?:overview|groups|advertisements|settlements|complaints|support-requests|payments|moderators)/?$ index.html [L]
+    RewriteRule ^admin/users/?$ index.html [L]
+    RewriteRule ^admin/users/(?:registrations|password-recoveries)/?$ index.html [L]
+    RewriteRule ^admin/registrations/?$ index.html [L]
+
+    # Everything else is genuinely absent. Keep the HTTP status as 404;
+    # Apache will render public/404.html through ErrorDocument above.
+    RewriteRule ^ - [R=404,L]
 </IfModule>
 
 <IfModule mod_headers.c>
@@ -33,4 +49,3 @@ Options -MultiViews
     ExpiresByType image/svg+xml "access plus 1 year"
     ExpiresByType font/woff2 "access plus 1 year"
 </IfModule>
-

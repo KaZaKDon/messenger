@@ -10,11 +10,19 @@ test("production frontend points to the HTTPS API and enables backend", async ()
     assert.match(productionEnv, /^VITE_BACKEND_ENABLED=true$/m);
 });
 
-test("shared hosting config preserves files and falls back to React Router", async () => {
-    const htaccess = await readFile("public/.htaccess", "utf8");
+test("shared hosting config preserves real SPA routes and returns a real 404 for unknown URLs", async () => {
+    const [htaccess, notFound] = await Promise.all([
+        readFile("public/.htaccess", "utf8"),
+        readFile("public/404.html", "utf8"),
+    ]);
+
     assert.match(htaccess, /RewriteCond %\{REQUEST_FILENAME\} -f/);
     assert.match(htaccess, /RewriteCond %\{REQUEST_FILENAME\} -d/);
-    assert.match(htaccess, /RewriteRule \^ index\.html \[L\]/);
+    assert.match(htaccess, /ErrorDocument 404 \/404\.html/);
+    assert.match(htaccess, /phone\|code\|chat\|settings/);
+    assert.ok(htaccess.includes("admin/users/(?:registrations|password-recoveries)"));
+    assert.match(htaccess, /RewriteRule \^ - \[R=404,L\]/);
+    assert.match(notFound, /<meta name="robots" content="noindex, nofollow">/);
 });
 
 test("search files expose only the public landing page", async () => {
